@@ -16,14 +16,13 @@ import {
     figma,
     docker,
     meta,
-    starbucks,
-    tesla,
-    shopify,
+    infosys,  
+    techzoetic,
     carrent,
     jobit,
     tripguide,
     threejs,
-  } from "../assets";
+} from "../assets";
   
   export const navLinks = [
     {
@@ -116,55 +115,33 @@ import {
   
   const experiences = [
     {
-      title: "React.js Developer",
-      company_name: "Starbucks",
-      icon: starbucks,
+      title: "SOFTWARE ENGINEER",
+      company_name: "TECHZOETIC",
+      icon: techzoetic,
       iconBg: "#383E56",
-      date: "March 2020 - April 2021",
+      date: "08/2024 - Present",
       points: [
-        "Developing and maintaining web applications using React.js and other related technologies.",
-        "Collaborating with cross-functional teams including designers, product managers, and other developers to create high-quality products.",
-        "Implementing responsive design and ensuring cross-browser compatibility.",
-        "Participating in code reviews and providing constructive feedback to other developers.",
+        "Designed and developed Power Apps solutions with a strong focus on front-end design, responsive UI, and user experience for internal and client-facing applications.",
+        "Built custom Microsoft Dynamics 365 CRM applications for a wood products company: Implemented bespoke entities, forms, workflows, and business rules for inventory management and order processing. Developed C# plugins and JavaScript logic, reducing manual errors by 30%.",
+        "Led development of Canvas Apps and Power Pages integration for an Academic Promotion platform: Integrated multi-language fields and role-based security. Secured access via OTP authentication using Power Automate and Azure Functions (99.9% uptime).",
+        "Developed a Power Pages portal for a trading company: Enabled Excel-based product catalog imports with server-side validation using Liquid. Integrated Google OAuth 2.0 for external partner login.",
+        "Automated business processes using Power Automate, achieving: 15% reduction in manual tasks and 20% boost in productivity. Routine approvals, notifications, and data syncs across Microsoft 365 services.",
+        "Delivered a 25% efficiency improvement through a custom Power Apps solution for a Credit Union.",
+        "Collaborated with cross-functional teams and stakeholders to gather requirements, define technical specifications, and implement scalable Power Platform solutions.",
+        "Contributed to CI/CD pipelines, participated in code reviews, and maintained documentation aligned with best practices."
       ],
     },
     {
-      title: "React Native Developer",
-      company_name: "Tesla",
-      icon: tesla,
+      title: "SYSTEM ENGINEER",
+      company_name: "INFOSYS",
+      icon: infosys,
       iconBg: "#E6DEDD",
-      date: "Jan 2021 - Feb 2022",
+      date: "03/2022 - 07/2024",
       points: [
-        "Developing and maintaining web applications using React.js and other related technologies.",
-        "Collaborating with cross-functional teams including designers, product managers, and other developers to create high-quality products.",
-        "Implementing responsive design and ensuring cross-browser compatibility.",
-        "Participating in code reviews and providing constructive feedback to other developers.",
-      ],
-    },
-    {
-      title: "Web Developer",
-      company_name: "Shopify",
-      icon: shopify,
-      iconBg: "#383E56",
-      date: "Jan 2022 - Jan 2023",
-      points: [
-        "Developing and maintaining web applications using React.js and other related technologies.",
-        "Collaborating with cross-functional teams including designers, product managers, and other developers to create high-quality products.",
-        "Implementing responsive design and ensuring cross-browser compatibility.",
-        "Participating in code reviews and providing constructive feedback to other developers.",
-      ],
-    },
-    {
-      title: "Full stack Developer",
-      company_name: "Meta",
-      icon: meta,
-      iconBg: "#E6DEDD",
-      date: "Jan 2023 - Present",
-      points: [
-        "Developing and maintaining web applications using React.js and other related technologies.",
-        "Collaborating with cross-functional teams including designers, product managers, and other developers to create high-quality products.",
-        "Implementing responsive design and ensuring cross-browser compatibility.",
-        "Participating in code reviews and providing constructive feedback to other developers.",
+        "Automated Power Platform solution exports/imports (managed solutions) across environments using Power Platform CLI, Azure DevOps pipelines and PowerShell.",
+        "Built custom connectors, virtual tables and Power Automate flows for REST API data exchange between D365 CRM, external systems and Power Pages.",
+        "Version‑controlled Canvas Apps, PCF controls and Power Pages assets in Git; tracked work in Jira/Azure Boards.",
+        "Developed Power Pages portals with Liquid templates, web roles and secure forms."
       ],
     },
   ];
