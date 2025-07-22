@@ -46,7 +46,11 @@ const About = () => {
 
     <motion.p variants={fadeIn("","",0.1,1)}
     className="mt-4 text-secondary text-[17px] max-w-3xl leading-[30px]">
-    A Software Development Engineer (SDE) designs, develops, tests, and maintains software applications. They write clean, efficient code, create and execute tests, and fix bugs to ensure high-quality software. SDEs collaborate with cross-functional teams, participate in code reviews, and document their work. Key skills include proficiency in programming languages (e.g., Java, Python), understanding of algorithms and data structures, and strong problem-solving abilities. They also stay updated with the latest technology trends. SDEs play a vital role in building reliable, scalable software solutions and contributing to the overall success of tech projects.
+    A Result-driven Software Engineer with 3+ years in full-stack development and Microsoft Power Platform, 
+    skilled at building custom applications and automating workflows to improve efficiency by up to 25%. 
+    Proficient in Power Apps, Power Automate, D365 CRM, React, JavaScript. Skilled in AI-driven development 
+    and prompt engineering—leveraging GPT models to create conversational interfaces, automate content 
+    generation, and streamline decision-making with a focus on performance.
     </motion.p>
 
     <div className='mt-20 flex flex-wrap gap-10'>
