@@ -196,7 +196,9 @@ function Scene() {
         const sc = 1 - Math.min(ad, 2.4) * 0.09;
         el.style.width = CW + "px";
         el.style.transform = `translate3d(${i * SP}px, -50%, ${tz}px) rotateY(${ry}deg) scale(${sc})`;
-        el.style.opacity = String(Math.max(0.3, 1 - ad * 0.36));
+        const cxp = fx + (i - p) * SP + CW / 2;
+        const edge = clamp((cxp - vw * 0.16) / (vw * 0.22), 0, 1);
+        el.style.opacity = String(Math.max(0.3, 1 - ad * 0.36) * (0.08 + 0.92 * edge));
         el.style.zIndex = String(200 - Math.round(ad * 10));
         el.style.filter = ad < 0.12 ? "none" : `brightness(${Math.max(0.5, 1 - ad * 0.26)})`;
       });
