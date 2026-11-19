@@ -25,7 +25,7 @@ body {
   cursor: pointer;
   background: #0b0d10;
 }
-.v2-intro > div {
+.v2-intro > div:has(> canvas) {
   position: absolute;
   inset: 0;
 }
@@ -52,10 +52,11 @@ body {
 
 .v2-crt {
   position: absolute;
-  left: 50%;
-  top: 43%;
+  left: 45.5%;
+  top: 44%;
   transform: translate(-50%, -50%);
-  width: min(430px, 76vw);
+  width: min(320px, 66vw);
+  font-size: 12px;
   padding: 18px 20px;
   border-radius: 10px;
   background: rgba(2, 4, 3, 0.62);
