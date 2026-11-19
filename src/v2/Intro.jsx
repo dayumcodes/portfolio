@@ -175,6 +175,25 @@ function buildPageCanvas(w, h, noAvatar) {
   document.querySelectorAll(".pill").forEach((p) => {
     const b = p.getBoundingClientRect();
     rr(b, 10, "rgba(255,255,255,0.08)", "rgba(255,255,255,0.1)");
+    const svg = p.querySelector("svg");
+    if (svg) {
+      const sb = svg.getBoundingClientRect();
+      const vb = (svg.getAttribute("viewBox") || "0 0 24 24").split(/\s+/).map(Number);
+      const sx = (sb.width / vb[2]) * k;
+      ctx.save();
+      ctx.translate(X(sb.left), Y(sb.top));
+      ctx.scale(sx, sx);
+      ctx.strokeStyle = getComputedStyle(svg).color;
+      ctx.lineWidth = parseFloat(svg.getAttribute("stroke-width") || "1.8");
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      svg.querySelectorAll("path").forEach((pa) => {
+        try {
+          ctx.stroke(new Path2D(pa.getAttribute("d")));
+        } catch {}
+      });
+      ctx.restore();
+    }
   });
   const bio = q(".bio");
   if (bio) textOf(bio);
@@ -454,9 +473,9 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   // near-orthographic 3/4 hold pose (long lens), then a swing to the front for the zoom
   const hold = (d, y = 0) => [827 * (d / 1520), 713 * (d / 1520) + y + 70, 1058 * (d / 1520) + 20];
   const shots = [
-    shot(0, hold(2300, 0), [0, 70, 20], 10),
-    shot(0.9, hold(1900, 0), [0, 72, 20], 10),
-    shot(T.drops, hold(1520), [0, 72, 20], 10),
+    shot(0, hold(2750, 0), [0, 70, 20], 10),
+    shot(0.9, hold(2200, 0), [0, 72, 20], 10),
+    shot(T.drops, hold(1780), [0, 72, 20], 10),
     shot(T.power - 0.3, [160, 140, 420], [0, 92, 30], 20),
     shot(T.power + 0.4, [0, 104, 250], [0, 96, 30], 30),
   ];

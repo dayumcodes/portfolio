@@ -29,7 +29,7 @@ void main(){
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }`;
 const FISH_FRAG = `
-precision mediump float;
+precision highp float;
 uniform vec3 uBase, uPatch, uDark; uniform float uSeed, uFade;
 varying vec3 vN; varying vec2 vUv; varying float vT; varying float vFin;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
@@ -47,14 +47,130 @@ void main(){
   vec2 sc = vec2(vT * 70.0, vUv.y * 22.0 + floor(vT * 70.0) * 0.5);
   float scales = smoothstep(0.0, 0.5, length(fract(sc) - 0.5));
   c *= 0.9 + 0.1 * scales;
-  float diff = 0.45 + 0.55 * clamp(dot(N, normalize(vec3(-0.25, 0.35, 0.9))), 0.0, 1.0);
-  float edge = 1.0 - 0.28 * smoothstep(0.55, 1.0, across);
+  vec3 L = normalize(vec3(-0.35, 0.45, 0.82));
+  float ndl = dot(N, L);
+  float diff = 0.30 + 0.70 * smoothstep(-0.25, 0.95, ndl);
+  float belly = smoothstep(0.35, 1.0, across);
+  float edge = 1.0 - 0.42 * belly;
+  float back = 1.0 - smoothstep(0.0, 0.55, across);
   vec3 col = c * diff * edge;
-  float spec = pow(clamp(dot(reflect(-normalize(vec3(-0.25, 0.35, 0.9)), N), vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 24.0);
-  col += vec3(0.5, 0.55, 0.6) * spec * 0.18 * (1.0 - vFin);
-  float alpha = mix(0.96, 0.55, vFin) * uFade;
+  col += c * back * 0.10;
+  // soft translucent rim of the fins and body edge
+  float rim = pow(1.0 - clamp(N.z, 0.0, 1.0), 2.0);
+  col += vec3(0.55, 0.62, 0.72) * rim * 0.10 * (1.0 - vFin) + c * rim * 0.08;
+  // wet highlights: a broad sheen and a tight glint along the back
+  vec3 R = reflect(-L, N);
+  float spec = pow(clamp(R.z, 0.0, 1.0), 14.0) * 0.20 + pow(clamp(R.z, 0.0, 1.0), 70.0) * 0.55;
+  col += vec3(0.75, 0.82, 0.9) * spec * (1.0 - vFin);
+  col = mix(col, col * vec3(1.06, 1.0, 0.94), 0.5);
+  float alpha = mix(0.98, 0.6, vFin) * uFade;
   gl_FragColor = vec4(col, alpha);
 }`;
+
+const SHADOW_FRAG = `
+precision mediump float;
+uniform float uFade; varying float vFin;
+void main(){ gl_FragColor = vec4(0.0, 0.0, 0.0, mix(0.26, 0.1, vFin) * uFade); }`;
+
+// ---- water layer: the dot grid under the page, bent by ripples and koi wakes
+const WATER_FRAG = `#version 300 es
+precision highp float;
+uniform vec2 uRes; uniform float uPR; uniform vec4 uRip[16]; uniform float uTime;
+out vec4 o;
+void main(){
+  vec2 p = gl_FragCoord.xy / uPR;
+  p.y = uRes.y - p.y;
+  vec2 d = vec2(0.0);
+  float hi = 0.0;
+  for(int i = 0; i < 16; i++){
+    vec4 r = uRip[i];
+    if(r.w <= 0.0) continue;
+    vec2 v = p - r.xy;
+    float dist = length(v);
+    float R = r.z * 150.0;
+    float w = exp(-pow((dist - R) / 48.0, 2.0));
+    float life = exp(-r.z * 0.9) * r.w;
+    float ph = (dist - R) * 0.22;
+    d += normalize(v + 0.001) * sin(ph) * w * life * 15.0;
+    hi += cos(ph) * w * life;
+  }
+  vec2 q = p - d;
+  vec2 c = (floor(q / 16.0) + 0.5) * 16.0;
+  float k = 1.0 - smoothstep(0.55, 1.45, length(q - c));
+  k *= 1.0 + clamp(abs(hi), 0.0, 1.0) * 0.5;
+  vec3 base = vec3(0.071, 0.078, 0.094);
+  vec3 col = mix(base, vec3(0.42, 0.5, 0.6), clamp(abs(hi) * 1.6, 0.0, 1.0));
+  float a = k + clamp(abs(hi), 0.0, 1.0) * 0.07;
+  o = vec4(col * a, a);
+}`;
+function mountWater() {
+  const c = document.createElement("canvas");
+  c.className = "water";
+  c.setAttribute("aria-hidden", "true");
+  const gl = c.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: false });
+  if (!gl) return null;
+  const mk = (t, src) => {
+    const sh = gl.createShader(t);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, "#version 300 es\nin vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }"));
+  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, WATER_FRAG));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, "a");
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = (n) => gl.getUniformLocation(prog, n);
+  const uRes = U("uRes"), uPR = U("uPR"), uRip = U("uRip[0]");
+  const rip = new Float32Array(64);
+  const age = new Float32Array(16).fill(99);
+  let n = 0;
+  let pr = 1;
+  const fit = () => {
+    pr = 1;
+    c.width = Math.round(innerWidth * pr);
+    c.height = Math.round(innerHeight * pr);
+    gl.viewport(0, 0, c.width, c.height);
+  };
+  fit();
+  const host = document.querySelector(".page")?.parentElement || document.body;
+  host.insertBefore(c, document.querySelector(".page") || host.firstChild);
+  document.documentElement.setAttribute("data-water", "");
+  return {
+    add(x, y, amp) {
+      const i = n++ % 16;
+      rip[i * 4] = x;
+      rip[i * 4 + 1] = y;
+      rip[i * 4 + 3] = amp;
+      age[i] = 0;
+    },
+    fit,
+    render(dt) {
+      for (let i = 0; i < 16; i++) {
+        age[i] += dt;
+        rip[i * 4 + 2] = age[i];
+        if (age[i] > 4.5) rip[i * 4 + 3] = 0;
+      }
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform2f(uRes, innerWidth, innerHeight);
+      gl.uniform1f(uPR, pr);
+      gl.uniform4fv(uRip, rip);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    },
+    dispose() {
+      c.remove();
+      document.documentElement.removeAttribute("data-water");
+    },
+  };
+}
 
 // Rounded koi: smooth lathe body, curved tail fan, leaf-shaped fins.
 function fishGeometry(len, wid) {
@@ -174,10 +290,21 @@ export function mountPond(canvas) {
       m.position.set(Math.random() * innerWidth, Math.random() * innerHeight, big ? 1 : 0);
       m.scale.setScalar(Math.min(1, Math.max(0.55, innerWidth / 1200)));
       scene.add(m);
-      out.push({ m, mat, a: Math.random() * 6.28, v: 30 + Math.random() * 25, turn: 0, big, len });
+      const smat = new THREE.ShaderMaterial({ vertexShader: FISH_VERT, fragmentShader: SHADOW_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide, uniforms: mat.uniforms });
+      const sh = new THREE.Mesh(m.geometry, smat);
+      sh.position.z = -0.5;
+      sh.renderOrder = -1;
+      scene.add(sh);
+      out.push({ sh, m, mat, a: Math.random() * 6.28, v: 30 + Math.random() * 25, turn: 0, big, len });
     }
     return out;
   };
+  let water = null;
+  try {
+    water = mountWater();
+  } catch (e) {
+    console.warn('water unavailable', e);
+  }
   const koi = mk(3 + ((Math.random() * 3) | 0), 190, 24, true);
   const fry = mk(9 + ((Math.random() * 7) | 0), 26, 3.4, false);
   const all = [...koi, ...fry];
@@ -222,6 +349,7 @@ export function mountPond(canvas) {
 
   const down = (e) => {
     ripple(e.clientX, innerHeight - e.clientY);
+    water?.add(e.clientX, e.clientY, 1.1);
     for (const f of all) {
       const dx = f.m.position.x - e.clientX;
       const dy = f.m.position.y - (innerHeight - e.clientY);
@@ -240,6 +368,7 @@ export function mountPond(canvas) {
   addEventListener("pointerdown", down, { passive: true });
   addEventListener("pointermove", move, { passive: true });
   const onResize = () => {
+    water?.fit();
     size();
     fit();
   };
@@ -289,6 +418,14 @@ export function mountPond(canvas) {
       p.x += Math.cos(f.a) * speed * dt;
       p.y += Math.sin(f.a) * speed * dt;
       f.m.rotation.z = f.a;
+      f.sh.position.set(p.x + 16 * f.m.scale.x + 4, p.y - 22 * f.m.scale.x - 4, -0.5);
+      f.sh.rotation.z = f.a;
+      f.sh.scale.copy(f.m.scale);
+      f.wake = (f.wake || 0) - dt;
+      if (water && f.wake <= 0 && speed > 20) {
+        f.wake = f.big ? 0.55 : 0.9;
+        water.add(p.x + Math.cos(f.a) * f.len * 0.3 * f.m.scale.x, innerHeight - (p.y + Math.sin(f.a) * f.len * 0.3 * f.m.scale.x), f.big ? 0.6 : 0.25);
+      }
       f.mat.uniforms.uTime.value = time;
       f.mat.uniforms.uSpeed.value = Math.min(1, speed / 80);
     }
@@ -306,6 +443,7 @@ export function mountPond(canvas) {
         ripples.splice(i, 1);
       }
     }
+    water?.render(dt);
     renderer.render(scene, cam);
     raf = requestAnimationFrame(loop);
   };
@@ -315,6 +453,7 @@ export function mountPond(canvas) {
     removeEventListener("pointerdown", down);
     removeEventListener("pointermove", move);
     removeEventListener("resize", onResize);
+    water?.dispose();
     renderer.dispose();
   };
 }

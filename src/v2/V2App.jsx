@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PROFILE, JOBS, PROJECTS } from "./data.js";
 import { canRun3D, run3D } from "./Intro.jsx";
 import { canRunPond, mountPond } from "./Fish.jsx";
 import CaseStudy from "./Case.jsx";
+import { tick, thunk } from "./audio.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const root = () => document.documentElement;
@@ -223,6 +225,97 @@ const Icon = ({ children }) => (
 );
 
 /* ------------------------------------------------------------------ */
+/* resume window                                                       */
+/* ------------------------------------------------------------------ */
+const RESUME_PAGES = ["/v2/resume/p1.webp", "/v2/resume/p2.webp", "/v2/resume/p3.webp"];
+function ResumeWindow() {
+  const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const sheet = typeof matchMedia === "function" && matchMedia("(max-width: 640px)").matches;
+  useEffect(() => {
+    const on = () => {
+      setZoom(100);
+      setOpen(true);
+      requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+    };
+    addEventListener("v2:resume", on);
+    return () => removeEventListener("v2:resume", on);
+  }, []);
+  useEffect(() => {
+    const h = root();
+    h.toggleAttribute("data-resume-motion", true);
+    if (open && shown) h.dataset.resume = "open";
+    else delete h.dataset.resume;
+    return () => {
+      delete h.dataset.resume;
+    };
+  }, [open, shown]);
+  const close = useCallback(() => {
+    setShown(false);
+    setTimeout(() => setOpen(false), 320);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e) => {
+      if (e.key === "Escape") close();
+      if (e.key === "+" || e.key === "=") setZoom((z) => Math.min(200, z + 25));
+      if (e.key === "-") setZoom((z) => Math.max(50, z - 25));
+    };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [open, close]);
+  if (!open) return null;
+  return createPortal(
+    <div className="rs" data-mode={sheet ? "sheet" : "window"} data-shown={shown ? "" : undefined} role="dialog" aria-modal="true" aria-label="Resume">
+      <div className="rs-backdrop" onClick={close} />
+      <div className="rs-window">
+        {sheet ? (
+          <div className="rs-sheet-head">
+            <span className="rs-grab" />
+            <div className="rs-sheet-row">
+              <span className="rs-title">mohammed-fuzail-resume.pdf</span>
+              <button type="button" className="rs-sheet-close" aria-label="Close resume" onClick={close}>
+                {"\u00d7"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rs-bar">
+            <button type="button" className="rs-close" aria-label="Close resume" onClick={close}>
+              <span className="rs-dot" />
+              <span className="rs-esc">esc</span>
+            </button>
+            <span className="rs-title">mohammed-fuzail-resume.pdf</span>
+            <div className="rs-actions">
+              <div className="rs-zoom">
+                <button type="button" className="rs-zoom-step" aria-label="Zoom out" disabled={zoom <= 50} onClick={() => setZoom((z) => Math.max(50, z - 25))}>
+                  {"\u2212"}
+                </button>
+                <button type="button" className="rs-zoom-level" onClick={() => setZoom(100)}>
+                  {zoom}%
+                </button>
+                <button type="button" className="rs-zoom-step" aria-label="Zoom in" disabled={zoom >= 200} onClick={() => setZoom((z) => Math.min(200, z + 25))}>
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="rs-body">
+          {RESUME_PAGES.map((src, i) => (
+            <div key={src} className="rs-page" style={{ width: `${Math.min(760, 760 * (zoom / 100))}px`, maxWidth: zoom > 100 ? "none" : "100%" }}>
+              <img src={src} alt={`Resume page ${i + 1}`} draggable="false" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* contact                                                             */
 /* ------------------------------------------------------------------ */
 const ico = (c) => (
@@ -248,11 +341,18 @@ const CONTACT_ICONS = {
     </>,
   ),
   check: ico(<path d="m5 12.5 4.5 4.5L19 7.5" />),
+  resume: ico(
+    <>
+      <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z" />
+      <path d="M14 3.5V8h4M8.5 12h7M8.5 15.5h5" />
+    </>,
+  ),
 };
 const WAYS = [
   { id: "linkedin", label: "linkedin", href: PROFILE.linkedin, key: "l" },
   { id: "github", label: "github", href: PROFILE.github, key: "g" },
   { id: "x", label: "x / twitter", href: PROFILE.x, key: "x" },
+  { id: "resume", label: "resume", key: "r" },
   { id: "email", label: "copy email", key: "c" },
 ];
 
@@ -285,6 +385,7 @@ function Contact() {
   });
 
   const toggle = () => {
+    tick(open ? 0.8 : 1.15);
     if (!open) measureClosed();
     setOpen((o) => !o);
   };
@@ -328,7 +429,11 @@ function Contact() {
   };
 
   const act = useCallback(async (w) => {
-    if (w.id === "email") {
+    thunk();
+    if (w.id === "resume") {
+      dispatchEvent(new CustomEvent("v2:resume"));
+      setOpen(false);
+    } else if (w.id === "email") {
       const ok = await copyText(PROFILE.email);
       if (ok) {
         setCopied(true);
@@ -555,6 +660,7 @@ function createController(el) {
       stopEls[lastOn]?.removeAttribute("data-on");
       stopEls[on]?.setAttribute("data-on", "");
       lastOn = on;
+      tick(1 + on * 0.04);
     }
   }
 
@@ -854,7 +960,11 @@ function Page() {
                 {p.href && !p.story ? <span className="card-eyebrow">~/live · side projects</span> : null}
                 {i === 1 ? <span className="card-eyebrow">~/live · things i shipped</span> : null}
                 <span className="card-media">
-                  <img className="card-img" src={p.image} alt={p.title} draggable={false} loading="eager" />
+                  {p.video ? (
+                    <video className="card-img" src={p.video} poster={p.poster || p.image} aria-label={p.title} muted loop autoPlay playsInline preload="metadata" disablePictureInPicture draggable={false} />
+                  ) : (
+                    <img className="card-img" src={p.image} alt={p.title} draggable={false} loading="eager" />
+                  )}
                 </span>
                 <span className="card-floor" aria-hidden="true">
                   <img className="card-reflection" src={p.image} alt="" draggable={false} loading="lazy" />
@@ -869,6 +979,7 @@ function Page() {
         })}
       </div>
       <Contact />
+      <ResumeWindow />
       <div className="slider" ref={sliderRef} role="slider" tabIndex={0} aria-label="Scroll through projects" aria-valuemin={0} aria-valuemax={100} aria-valuenow={0} aria-valuetext="Intro">
         <div className="slider-well">
           <span className="slider-groove" />

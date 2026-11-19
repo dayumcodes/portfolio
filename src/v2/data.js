@@ -89,6 +89,8 @@ export const PROJECTS = [
     ],
   }),
   P("windshield-hud", "Windshield HUD", "react · geolocation", "/v2/cards/hud.jpg", {
+    video: "/v2/cards/hud.mp4",
+    poster: "/v2/cards/hud-poster.jpg",
     headline: "A heads-up display for your windshield",
     summary: "Speed, heading and turn-by-turn directions, mirrored so they reflect on the glass.",
     href: "https://windshield-hud.vercel.app",
