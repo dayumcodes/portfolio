@@ -512,7 +512,10 @@ body {
 @media (max-width: 860px) {
   .v2-header {
     left: 6%;
-    top: 42%;
+    top: 39%;
+  }
+  .v2-job-body {
+    display: none;
   }
   .v2-signature {
     font-size: 46px;
@@ -525,12 +528,6 @@ body {
   .v2-bio {
     font-size: 12.5px;
     margin: 14px 0 16px;
-  }
-  .v2-job-body li {
-    display: none;
-  }
-  .v2-job-body li:first-child {
-    display: list-item;
   }
   .v2-scrub {
     bottom: 18px;
