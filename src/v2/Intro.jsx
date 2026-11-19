@@ -47,18 +47,18 @@ function Rig({ phase, onZoomed }) {
     const cam = state.camera;
     const t = state.clock.elapsedTime;
     if (phase === "zoom") {
-      v.current.set(-0.55, -0.85, 0.25);
+      v.current.set(-1.35, -0.85, 0.3);
       cam.position.lerp(v.current, 1 - Math.pow(0.008, dt));
-      cam.lookAt(-0.55, -1.05, -1.5);
-      if (!zoomed.current && cam.position.z < 0.5) {
+      cam.lookAt(-1.35, -0.95, -1.5);
+      if (!zoomed.current && cam.position.z < 0.45) {
         zoomed.current = true;
         onZoomed?.();
       }
     } else {
       const amp = phase === "boot" ? 0.1 : 0.38;
-      v.current.set(Math.sin(t * 0.22) * amp, 0.5, 4.35);
+      v.current.set(-0.7 + Math.sin(t * 0.22) * amp, 0.75, 6.3);
       cam.position.lerp(v.current, 1 - Math.pow(0.0001, dt));
-      cam.lookAt(0, -0.6, -1.5);
+      cam.lookAt(-1.35, -0.75, -1.5);
     }
   });
   return null;
@@ -95,7 +95,7 @@ export default function Intro({ onDone }) {
         setPhase((p) => (p === "off" ? "boot" : p === "boot" ? "zoom" : p))
       }
     >
-      <Canvas shadows dpr={[1, 1.75]} camera={{ position: [0, 0.5, 4.35], fov: 42 }}>
+      <Canvas shadows dpr={[1, 1.75]} camera={{ position: [-0.7, 0.75, 6.3], fov: 40 }}>
         <Suspense fallback={null}>
           <Computer onReady={() => setReady(true)} />
         </Suspense>
