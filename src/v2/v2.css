@@ -1275,3 +1275,10 @@ html[data-intro="done"] .contact {
     clip-path: none;
   }
 }
+
+html[data-project="open"] .pond {
+  opacity: 0.1;
+}
+.pond {
+  transition: opacity 0.9s;
+}

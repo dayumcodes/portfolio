@@ -230,7 +230,7 @@ void main(){
   float vig = 1.0 - (1.0-uClean)*0.55*dot(c,c)*0.5;
   col *= vig;
   vec3 line = vec3(0.85,0.95,1.0) * (1.0-smoothstep(0.0,0.35,uPower)*0.0);
-  col = mix(line*1.4, col, smoothstep(0.55,1.0,uPower));
+  col = mix(line*0.38, col, smoothstep(0.35,0.9,uPower));
   gl_FragColor = vec4(col*mask, 1.0);
 }`;
 
@@ -265,18 +265,18 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   renderer.setClearColor(new THREE.Color(bgc), 1);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, w0 / h0, 1, 2000);
+  const camera = new THREE.PerspectiveCamera(30, w0 / h0, 10, 5000);
 
   scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2e36, 1.5));
   const key = new THREE.DirectionalLight(0xfff2e6, 3.4);
   key.position.set(-220, 300, 200);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
-  Object.assign(key.shadow.camera, { left: -220, right: 220, top: 220, bottom: -220, near: 10, far: 800 });
+  Object.assign(key.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 10, far: 900 });
   key.shadow.bias = -0.0004;
   key.shadow.radius = 5;
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x9db8ff, 1.1);
+  const rim = new THREE.DirectionalLight(0xd5d9e0, 0.5);
   rim.position.set(160, 120, -160);
   scene.add(rim);
 
@@ -432,12 +432,14 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
 
   // camera shots
   const shot = (t, pos, look, fov) => ({ t, pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look), fov });
+  // near-orthographic 3/4 hold pose (long lens), then a swing to the front for the zoom
+  const hold = (d, y = 0) => [827 * (d / 1520), 713 * (d / 1520) + y + 70, 1058 * (d / 1520) + 20];
   const shots = [
-    shot(0, [340, 260, 540], [0, 72, 20], 22),
-    shot(0.9, [300, 225, 460], [0, 78, 20], 21),
-    shot(T.drops, [260, 200, 410], [0, 80, 20], 20),
-    shot(T.power - 0.2, [90, 125, 300], [0, 92, 30], 26),
-    shot(T.power + 0.5, [0, 104, 250], [0, 96, 30], 30),
+    shot(0, hold(2300, 0), [0, 70, 20], 10),
+    shot(0.9, hold(1900, 0), [0, 72, 20], 10),
+    shot(T.drops, hold(1520), [0, 72, 20], 10),
+    shot(T.power - 0.3, [160, 140, 420], [0, 92, 30], 20),
+    shot(T.power + 0.4, [0, 104, 250], [0, 96, 30], 30),
   ];
   const camPos = shots[0].pos.clone();
   const camLook = shots[0].look.clone();

@@ -30,7 +30,7 @@ void main(){
 }`;
 const FISH_FRAG = `
 precision mediump float;
-uniform vec3 uBase, uPatch, uDark; uniform float uSeed;
+uniform vec3 uBase, uPatch, uDark; uniform float uSeed, uFade;
 varying vec3 vN; varying vec2 vUv; varying float vT; varying float vFin;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
 float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
@@ -52,7 +52,7 @@ void main(){
   vec3 col = c * diff * edge;
   float spec = pow(clamp(dot(reflect(-normalize(vec3(-0.25, 0.35, 0.9)), N), vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 24.0);
   col += vec3(0.5, 0.55, 0.6) * spec * 0.18 * (1.0 - vFin);
-  float alpha = mix(0.96, 0.55, vFin);
+  float alpha = mix(0.96, 0.55, vFin) * uFade;
   gl_FragColor = vec4(col, alpha);
 }`;
 
@@ -167,6 +167,7 @@ export function mountPond(canvas) {
           uPatch: { value: new THREE.Color(pal[1]) },
           uDark: { value: new THREE.Color(pal[2]) },
           uSeed: { value: Math.random() * 20 },
+          uFade: { value: 1 },
         },
       });
       const m = new THREE.Mesh(fishGeometry(len, wid), mat);
@@ -180,6 +181,26 @@ export function mountPond(canvas) {
   const koi = mk(3 + ((Math.random() * 4) | 0), 118, 15, true);
   const fry = mk(9 + ((Math.random() * 7) | 0), 34, 4.2, false);
   const all = [...koi, ...fry];
+  // keep text readable: fish dim and steer away from text zones
+  let zones = [];
+  let zoneAt = 0;
+  const refreshZones = (now) => {
+    if (now - zoneAt < 160) return;
+    zoneAt = now;
+    const out = [];
+    const intro = document.querySelector(".intro");
+    const layer = document.querySelector(".intro-layer");
+    const lop = layer ? parseFloat(getComputedStyle(layer).opacity) : 1;
+    if (intro && lop > 0.25) {
+      const r = intro.getBoundingClientRect();
+      out.push({ l: r.left - 24, r: r.right + 24, t: r.top - 10, b: r.bottom + 12 });
+    }
+    document.querySelectorAll(".card-meta, .slider, .contact, .card-eyebrow").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width && r.right > 0 && r.left < innerWidth) out.push({ l: r.left - 12, r: r.right + 12, t: r.top - 8, b: r.bottom + 10 });
+    });
+    zones = out;
+  };
   const mouse = { x: -1e4, y: -1e4, still: 0, moved: 0 };
 
   // ripples
@@ -233,6 +254,7 @@ export function mountPond(canvas) {
     last = now;
     time += dt;
     const still = now - mouse.moved > 700;
+    refreshZones(now);
     for (const f of all) {
       const p = f.m.position;
       let speed = f.v;
@@ -243,6 +265,20 @@ export function mountPond(canvas) {
         const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
         if (d < 420 && d > 40) target = Math.atan2(mouse.y - p.y, mouse.x - p.x);
       }
+      // zone avoidance (screen y is flipped against world y)
+      let inside = false;
+      for (const z of zones) {
+        const sy = innerHeight - p.y;
+        const cx = (z.l + z.r) / 2;
+        const cy = (z.t + z.b) / 2;
+        if (p.x > z.l - 30 && p.x < z.r + 30 && sy > z.t - 30 && sy < z.b + 30) {
+          if (p.x > z.l && p.x < z.r && sy > z.t && sy < z.b) inside = true;
+          if (!f.flee) target = Math.atan2(-(cy - sy) * 1, p.x - cx) * 1;
+          if (!f.flee) target = Math.atan2(sy - cy > 0 ? -(sy - cy) : -(sy - cy), p.x - cx);
+        }
+      }
+      const want = inside ? 0.12 : 1;
+      f.mat.uniforms.uFade.value += (want - f.mat.uniforms.uFade.value) * Math.min(1, dt * 6);
       if (f.flee > 0) {
         f.flee -= dt;
         speed *= 3.4;
