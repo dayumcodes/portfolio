@@ -5,12 +5,18 @@
   --v2-panel: #1d1d1d;
   --v2-border: #2b2b2b;
   --v2-text: #d6d6d6;
-  --v2-dim: #7a7a7a;
-  --v2-faint: #4a4a4a;
+  --v2-dim: #9b9b9b;
+  --v2-faint: #727272;
   --v2-green: #7ee787;
   --v2-amber: #e8b04b;
   --v2-blue: #6cb6ff;
   --v2-red: #ff7b72;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--v2-bg);
 }
 
 .v2-root {
