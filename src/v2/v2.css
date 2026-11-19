@@ -257,6 +257,7 @@ html[data-intro="done"] .signature-word {
   white-space: pre;
   font-variant-ligatures: none;
   margin-top: 30px;
+  min-height: 255px;
   line-height: 1.5;
   position: relative;
 }
@@ -1282,3 +1283,7 @@ html[data-project="open"] .pond {
 .pond {
   transition: opacity 0.9s;
 }
+
+/* matched to reference home rhythm at 1100x640 */
+.intro .bio { margin-top: 32px; }
+.intro .tree { margin-top: 32px; min-height: 255px; }

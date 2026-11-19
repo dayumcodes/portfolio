@@ -150,9 +150,9 @@ function buildPageCanvas(w, h, noAvatar) {
   const mas = q(".mascot");
   const finish = () => c;
   if (mas) {
-    const b = mas.getBoundingClientRect();
-    rr(b, b.width / 2, "#2a2d33");
     const im = mas.querySelector("img");
+    const b = (im || mas).getBoundingClientRect();
+    rr(b, b.width / 2, "#2a2d33");
     if (!noAvatar && im && im.complete && im.naturalWidth) {
       try {
         ctx.save();
@@ -193,7 +193,26 @@ function buildPageCanvas(w, h, noAvatar) {
     const b = sl.getBoundingClientRect();
     rr(b, b.height / 2, "rgba(255,255,255,0.06)", "rgba(255,255,255,0.12)");
     const kn = q(".slider-knob");
-    if (kn) rr(kn.getBoundingClientRect(), 6, "#d9dde4");
+    if (kn) {
+      const kb = kn.getBoundingClientRect();
+      const cx = X(kb.left + kb.width / 2);
+      const cy = Y(kb.top + kb.height / 2);
+      const kr = (kb.width / 2) * k;
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.65)";
+      ctx.shadowBlur = 12 * k;
+      ctx.shadowOffsetY = 5 * k;
+      const g = ctx.createRadialGradient(cx - kr * 0.2, cy - kr * 0.4, 0, cx, cy, kr);
+      g.addColorStop(0, "#56595f");
+      g.addColorStop(0.3, "#393d41");
+      g.addColorStop(0.65, "#25282c");
+      g.addColorStop(1, "#101215");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(cx, cy, kr, 0, 7);
+      ctx.fill();
+      ctx.restore();
+    }
   }
   return finish();
 }

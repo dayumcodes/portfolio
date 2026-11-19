@@ -178,8 +178,8 @@ export function mountPond(canvas) {
     }
     return out;
   };
-  const koi = mk(3 + ((Math.random() * 4) | 0), 118, 15, true);
-  const fry = mk(9 + ((Math.random() * 7) | 0), 34, 4.2, false);
+  const koi = mk(3 + ((Math.random() * 3) | 0), 190, 24, true);
+  const fry = mk(9 + ((Math.random() * 7) | 0), 26, 3.4, false);
   const all = [...koi, ...fry];
   // keep text readable: fish dim and steer away from text zones
   let zones = [];
