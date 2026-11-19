@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { PROFILE, JOBS, PROJECTS, SIGNATURE_PATH } from "./data.js";
+import { PROFILE, JOBS, PROJECTS } from "./data.js";
 import { canRun3D, run3D } from "./Intro.jsx";
 import { canRunPond, mountPond } from "./Fish.jsx";
 import CaseStudy from "./Case.jsx";
@@ -47,26 +47,14 @@ function drawFilmLight(canvas) {
 /* signature                                                           */
 /* ------------------------------------------------------------------ */
 function Signature() {
-  const ref = useRef(null);
+  // A typographic wordmark (not a claimed handwritten signature), revealed left to right.
   useLayoutEffect(() => {
-    const path = ref.current;
-    if (!path) return;
-    const len = Math.ceil(path.getTotalLength());
-    const dur = 2.1;
-    const delay = 0.35;
-    path.style.setProperty("--len", String(len));
-    path.style.setProperty("--dur", dur + "s");
-    path.style.setProperty("--delay", delay + "s");
-    root().style.setProperty("--sig-end", (delay + dur * 0.8).toFixed(2) + "s");
-    // the CSS vars live on the path, but the animation reads them from it
-    path.parentElement.style.setProperty("--len", String(len));
-    path.parentElement.style.setProperty("--dur", dur + "s");
-    path.parentElement.style.setProperty("--delay", delay + "s");
+    root().style.setProperty("--sig-end", "1.9s");
   }, []);
   return (
-    <svg className="signature" viewBox="0 0 520 140" aria-hidden="true">
-      <path ref={ref} d={SIGNATURE_PATH} />
-    </svg>
+    <div className="signature" aria-hidden="true">
+      <span className="signature-word">Fuzail</span>
+    </div>
   );
 }
 
@@ -135,7 +123,7 @@ function Mascot({ size = 104 }) {
     >
       <span ref={body} className="mascot-body">
         <span ref={face} className="mascot-face">
-          <img ref={img} src={PROFILE.avatar} alt="" crossOrigin="anonymous" draggable={false} />
+          <img ref={img} src={PROFILE.avatar} alt="" draggable={false} />
         </span>
       </span>
     </button>
@@ -978,8 +966,8 @@ export default function V2App() {
     <>
       <canvas ref={filmRef} className="film-light" aria-hidden="true" />
       {overlay && <div ref={overlayRef} className="intro-overlay" role="status" aria-label="Loading" />}
-      <Page />
       <canvas ref={pondRef} className="pond" aria-hidden="true" />
+      <Page />
       <CaseStudy />
     </>
   );

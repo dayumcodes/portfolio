@@ -21,7 +21,7 @@ const ss = (a, b, v) => {
 const easeOut = (p) => 1 - Math.pow(1 - p, 3);
 
 // timeline, seconds
-const T = { drops: 2.6, power: 3.2, boot: 4.0, page: 6.1, zoom: 6.6, fade: 9.0, end: 9.6 };
+const T = { drops: 2.6, power: 3.2, boot: 4.0, page: 6.0, zoom: 6.4, fade: 9.0, end: 9.6 };
 
 const SW = 84;
 const SH = 70;
@@ -120,6 +120,7 @@ function buildPageCanvas(w, h, noAvatar) {
       ctx.font = `${st.fontWeight} ${size * k}px ${font || st.fontFamily}`;
       ctx.fillStyle = color || st.color;
       ctx.textBaseline = "alphabetic";
+      ctx.letterSpacing = st.letterSpacing === "normal" ? "0px" : st.letterSpacing;
       const txt = node.textContent;
       const re = /\S+/g;
       let m;
@@ -133,21 +134,18 @@ function buildPageCanvas(w, h, noAvatar) {
       }
     }
   };
-  const sig = q(".signature");
-  if (sig) {
-    const b = sig.getBoundingClientRect();
-    const p = sig.querySelector("path");
-    try {
-      const path = new Path2D(p.getAttribute("d"));
-      ctx.save();
-      ctx.translate(X(b.left), Y(b.top));
-      ctx.scale((b.width / 520) * k, (b.width / 520) * k);
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = 2.2;
-      ctx.lineCap = "round";
-      ctx.stroke(path);
-      ctx.restore();
-    } catch {}
+  const sigw = q(".signature-word");
+  if (sigw) {
+    const b = sigw.getBoundingClientRect();
+    const st = getComputedStyle(sigw);
+    ctx.font = `italic ${st.fontWeight} ${parseFloat(st.fontSize) * k}px ${st.fontFamily}`;
+    ctx.fillStyle = "#3b4048";
+    ctx.textBaseline = "alphabetic";
+    ctx.save();
+    ctx.translate(X(b.left), Y(b.top + parseFloat(st.fontSize) * 0.86));
+    ctx.transform(1, 0, -0.14, 1, 0, 0);
+    ctx.fillText("Fuzail", 0, 0);
+    ctx.restore();
   }
   const mas = q(".mascot");
   const finish = () => c;
@@ -269,9 +267,9 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, w0 / h0, 1, 2000);
 
-  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x20242c, 0.9));
-  const key = new THREE.DirectionalLight(0xfff2dd, 2.6);
-  key.position.set(-120, 260, 220);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x2a2e36, 1.5));
+  const key = new THREE.DirectionalLight(0xfff2e6, 3.4);
+  key.position.set(-220, 300, 200);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   Object.assign(key.shadow.camera, { left: -220, right: 220, top: 220, bottom: -220, near: 10, far: 800 });
@@ -287,9 +285,9 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const beige = new THREE.MeshStandardMaterial({ color: 0xd6cfbd, roughness: 0.55, metalness: 0.02 });
-  const beigeDark = new THREE.MeshStandardMaterial({ color: 0xb9b2a0, roughness: 0.6 });
-  const keyMat = new THREE.MeshStandardMaterial({ color: 0xcfc8b6, roughness: 0.5 });
+  const beige = new THREE.MeshStandardMaterial({ color: 0x4f5257, roughness: 0.62, metalness: 0.02 });
+  const beigeDark = new THREE.MeshStandardMaterial({ color: 0x383b3f, roughness: 0.65 });
+  const keyMat = new THREE.MeshStandardMaterial({ color: 0x5c5f64, roughness: 0.5 });
   const keyMatDark = new THREE.MeshStandardMaterial({ color: 0x8e8a80, roughness: 0.5 });
   const black = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.4 });
 
@@ -324,12 +322,39 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   inner.position.set(0, SY + 4, SZ + 0.1 + 1.8);
   add(inner, 0.7, 170);
   // floppy slot, badge
-  const slot = new THREE.Mesh(new THREE.BoxGeometry(34, 2.4, 1), black);
-  slot.position.set(0, 44 + 4, 32.3);
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(38, 2.4, 1), black);
+  slot.position.set(26, 44 + 4, 32.3);
   add(slot, 0.95, 140);
   const led = new THREE.Mesh(new THREE.CircleGeometry(1.1, 16), new THREE.MeshBasicMaterial({ color: 0x4cff7a }));
-  led.position.set(48, 44 + 4, 32.4);
+  led.position.set(54, 38 + 4, 32.4);
   add(led, 1.0, 140);
+  // rainbow badge, top vents, handle recess, side vents
+  const badge = new THREE.Group();
+  [0xe5484d, 0xf2a93b, 0x4cb86a, 0x3b82f6].forEach((c, i) => {
+    const sq = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 0.6), new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
+    sq.position.set((i % 2) * 2.8, -Math.floor(i / 2) * 2.8, 0);
+    badge.add(sq);
+  });
+  badge.position.set(-52, 49 + 4, 32.4);
+  add(badge, 1.0, 140);
+  const vents = new THREE.Group();
+  for (let i = 0; i < 7; i++) {
+    const v = new THREE.Mesh(new THREE.BoxGeometry(46, 0.5, 1.3), black);
+    v.position.set(-20, 77.5 + 4 + 72.6, -4 + i * 3.2);
+    vents.add(v);
+  }
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(86, 0.6, 5), black);
+  handle.position.set(0, 77.5 + 4 + 72.6, 24);
+  vents.add(handle);
+  for (let i = 0; i < 9; i++) {
+    const v = new THREE.Mesh(new THREE.BoxGeometry(0.6, 16, 1.3), black);
+    v.position.set(68.2, 112, -22 + i * 3.4);
+    vents.add(v);
+    const w = v.clone();
+    w.position.y = 82;
+    vents.add(w);
+  }
+  add(vents, 0.4, 170);
 
   // screen
   const SCR_W = 1024;
@@ -379,11 +404,11 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
     // setPosition keeps scale
     const mm = new THREE.Matrix4().makeTranslation(k.x + (k.w > 1 ? (k.w * 7.4) / 2 - 3.7 + 6 : 0), 5.2, k.z).multiply(new THREE.Matrix4().makeScale(k.w, 1, 1));
     kmesh.setMatrixAt(i, mm);
-    kmesh.setColorAt(i, new THREE.Color(k.pad || k.row === 0 ? 0xa9a392 : 0xd2cbb9));
+    kmesh.setColorAt(i, new THREE.Color(k.pad || k.row === 0 ? 0x484b50 : 0x62656a));
   });
   kmesh.instanceColor.needsUpdate = true;
   kb.add(kmesh);
-  kb.position.set(-6, 0, 78);
+  kb.position.set(-6, 2.6, 78);
   kb.rotation.x = -Math.atan(6.5 / 70) * 0;
   kb.userData.slope = Math.atan(6.5 / 70);
   add(kb, 1.2, 150);
@@ -399,7 +424,7 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   add(mouse, 1.5, 130);
   const cordPts = [new THREE.Vector3(88, 2, 64), new THREE.Vector3(86, 1.2, 50), new THREE.Vector3(70, 1.2, 46), new THREE.Vector3(60, 1.2, 40), new THREE.Vector3(30, 1.2, 36)];
   const cordGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cordPts), 64, 0.7, 6, false);
-  const cord = new THREE.Mesh(cordGeo, black);
+  const cord = new THREE.Mesh(cordGeo, new THREE.MeshStandardMaterial({ color: 0xe8eaed, roughness: 0.6 }));
   cord.castShadow = true;
   scene.add(cord);
   const cordIdx = cordGeo.index.count;
@@ -408,10 +433,11 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
   // camera shots
   const shot = (t, pos, look, fov) => ({ t, pos: new THREE.Vector3(...pos), look: new THREE.Vector3(...look), fov });
   const shots = [
-    shot(0, [60, 150, 520], [0, 70, 20], 26),
-    shot(0.9, [-40, 120, 420], [0, 80, 20], 28),
-    shot(T.drops, [0, 112, 330], [0, 88, 20], 30),
-    shot(T.power, [0, 104, 250], [0, 96, 30], 30),
+    shot(0, [340, 260, 540], [0, 72, 20], 22),
+    shot(0.9, [300, 225, 460], [0, 78, 20], 21),
+    shot(T.drops, [260, 200, 410], [0, 80, 20], 20),
+    shot(T.power - 0.2, [90, 125, 300], [0, 92, 30], 26),
+    shot(T.power + 0.5, [0, 104, 250], [0, 96, 30], 30),
   ];
   const camPos = shots[0].pos.clone();
   const camLook = shots[0].look.clone();
@@ -429,7 +455,7 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
     const th = Math.tan((fov * Math.PI) / 360);
     const distH = SH / 2 / th;
     const distW = SW / 2 / (th * asp);
-    const dist = Math.min(distH, distW);
+    const dist = Math.min(distH, distW) * 0.975;
     return shot(T.zoom, [0, SY + 4, SZ + 2.2 + dist], [0, SY + 4, SZ + 2.2], fov);
   }
   let zoomS = null;
@@ -452,7 +478,7 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
       p.obj.rotation.z = p.obj.userData.baseRot.z + p.spin * (1 - e);
       p.obj.rotation.x = p.obj.userData.baseRot.x + (p === parts.find((q) => q.obj === kb) ? 0 : 0);
     }
-    kb.rotation.x = kb.userData.slope * 0 - 0.0;
+    kb.rotation.x = kb.userData.slope;
     cordGeo.setDrawRange(0, Math.floor(cordIdx * easeOut(clamp((t - 1.9) / 0.7, 0, 1)) / 3) * 3);
 
     // screen

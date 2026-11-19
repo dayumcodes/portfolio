@@ -13,51 +13,73 @@ export function canRunPond() {
 
 const FISH_VERT = `
 uniform float uTime, uPhase, uSpeed, uLen;
-varying vec3 vN; varying vec2 vUv; varying float vT;
+varying vec3 vN; varying vec2 vUv; varying float vT; varying float vFin;
+attribute float aFin;
 void main(){
   vec3 p = position;
   float t = clamp((p.x / uLen) + 0.5, 0.0, 1.0); // 0 tail .. 1 head
-  float amp = (1.0 - t) * (1.0 - t) * (0.1 + 0.18 * uSpeed) * uLen;
-  float w = sin(uTime * (3.0 + 5.0 * uSpeed) + uPhase + t * 5.0);
-  p.z += amp * w;
-  vec3 n = normal;
-  float slope = amp * 0.0;
-  vN = normalMatrix * n;
-  vUv = uv; vT = t;
+  float k = (1.0 - t);
+  float amp = k * k * (0.07 + 0.16 * uSpeed) * uLen;
+  float w = sin(uTime * (3.0 + 5.0 * uSpeed) + uPhase - t * 5.5);
+  p.y += amp * w * (0.55 + 0.45 * k);
+  // fins flutter a little on their own
+  p.y += aFin * sin(uTime * 4.0 + uPhase + p.x * 0.08) * 0.06 * uLen * abs(p.z) * 0.0;
+  vN = normalMatrix * normal;
+  vUv = uv; vT = t; vFin = aFin;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }`;
 const FISH_FRAG = `
 precision mediump float;
-uniform vec3 uBase, uPatch; uniform float uSeed;
-varying vec3 vN; varying vec2 vUv; varying float vT;
+uniform vec3 uBase, uPatch, uDark; uniform float uSeed;
+varying vec3 vN; varying vec2 vUv; varying float vT; varying float vFin;
 float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
 float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
   return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
 void main(){
-  float pt = smoothstep(0.52, 0.6, n(vec2(vT*5.0+uSeed, vUv.y*3.0+uSeed*2.0)));
+  vec3 N = normalize(vN);
+  float across = abs(vUv.y - 0.5) * 2.0;
+  float field = n(vec2(vT * 4.0 + uSeed, vUv.y * 2.2 + uSeed * 1.7)) * 0.65 + n(vec2(vT * 9.0 + uSeed * 3.0, vUv.y * 5.0)) * 0.35;
+  float pt = smoothstep(0.5, 0.62, field);
+  float dk = smoothstep(0.7, 0.76, n(vec2(vT * 6.0 + uSeed * 2.0, vUv.y * 3.0 + 4.0)));
   vec3 c = mix(uBase, uPatch, pt);
-  float scale = 0.5+0.5*sin(vT*90.0)*sin(vUv.y*60.0);
-  c *= 0.92 + 0.08 * scale;
-  float l = 0.55 + 0.45 * clamp(dot(normalize(vN), normalize(vec3(-0.3,0.8,0.6))), 0.0, 1.0);
-  gl_FragColor = vec4(c * l, 0.92);
+  c = mix(c, uDark, dk * 0.9);
+  // scale pattern
+  vec2 sc = vec2(vT * 70.0, vUv.y * 22.0 + floor(vT * 70.0) * 0.5);
+  float scales = smoothstep(0.0, 0.5, length(fract(sc) - 0.5));
+  c *= 0.9 + 0.1 * scales;
+  float diff = 0.45 + 0.55 * clamp(dot(N, normalize(vec3(-0.25, 0.35, 0.9))), 0.0, 1.0);
+  float edge = 1.0 - 0.28 * smoothstep(0.55, 1.0, across);
+  vec3 col = c * diff * edge;
+  float spec = pow(clamp(dot(reflect(-normalize(vec3(-0.25, 0.35, 0.9)), N), vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 24.0);
+  col += vec3(0.5, 0.55, 0.6) * spec * 0.18 * (1.0 - vFin);
+  float alpha = mix(0.96, 0.55, vFin);
+  gl_FragColor = vec4(col, alpha);
 }`;
 
+// Rounded koi: smooth lathe body, curved tail fan, leaf-shaped fins.
 function fishGeometry(len, wid) {
-  // body: lathe-like along x, flattened in z
-  const seg = 28;
-  const ring = 14;
+  const seg = 40;
+  const ring = 18;
   const pos = [];
   const uv = [];
+  const fin = [];
   const idx = [];
+  const prof = (t) => {
+    // t: 0 tail .. 1 head. broad shoulders near 0.68, tapering peduncle, rounded nose
+    const head = Math.sqrt(Math.max(0, 1 - Math.pow((t - 0.86) / 0.14, 2)));
+    const body = Math.sin(Math.PI * Math.pow(t, 0.62));
+    const r = t > 0.86 ? head * 0.78 : 0.1 + 0.9 * Math.pow(Math.max(0, body), 0.9);
+    return Math.max(0.04, r);
+  };
   for (let i = 0; i <= seg; i++) {
-    const t = i / seg; // 0 tail .. 1 head
+    const t = i / seg;
     const x = (t - 0.5) * len;
-    const prof = Math.sin(Math.pow(t, 0.7) * Math.PI) ** 0.8 * (0.2 + 0.8 * Math.min(1, t * 2.2));
-    const r = wid * (t < 0.15 ? 0.12 + t * 2.4 : prof);
+    const r = wid * prof(t);
     for (let j = 0; j <= ring; j++) {
       const a = (j / ring) * Math.PI * 2;
-      pos.push(x, Math.cos(a) * r, Math.sin(a) * r * 0.55);
+      pos.push(x, Math.cos(a) * r, Math.sin(a) * r * 0.62);
       uv.push(t, j / ring);
+      fin.push(0);
     }
   }
   for (let i = 0; i < seg; i++)
@@ -66,24 +88,46 @@ function fishGeometry(len, wid) {
       const b = a + ring + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
-  // tail fan + pectoral fins (flat triangles)
-  const add = (pts) => {
+  const sheet = (pts) => {
+    // fan from first point
     const base = pos.length / 3;
-    pts.forEach(([x, y, z]) => {
-      pos.push(x, y, z);
-      uv.push(x / len + 0.5, 0.5);
+    pts.forEach(([x, y]) => {
+      pos.push(x, y, 0);
+      uv.push(x / len + 0.5, 0.5 + y / (wid * 3));
+      fin.push(1);
     });
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 1);
+    for (let i = 1; i < pts.length - 1; i++) idx.push(base, base + i, base + i + 1, base, base + i + 1, base + i);
   };
-  add([[-len * 0.46, 0, 0], [-len * 0.62, wid * 1.3, 0], [-len * 0.6, -wid * 1.3, 0]]);
-  add([[-len * 0.46, 0, 0], [-len * 0.66, wid * 0.55, 0], [-len * 0.66, -wid * 0.55, 0]]);
-  add([[len * 0.16, wid * 0.5, 0], [len * 0.04, wid * 1.5, 0], [-len * 0.06, wid * 0.7, 0]]);
-  add([[len * 0.16, -wid * 0.5, 0], [len * 0.04, -wid * 1.5, 0], [-len * 0.06, -wid * 0.7, 0]]);
+  // tail fan: curved edge with a soft notch
+  const tail = [[-len * 0.45, 0]];
+  for (let i = 0; i <= 14; i++) {
+    const u = (i / 14) * 2 - 1;
+    const x = -len * (0.62 + 0.1 * (1 - Math.abs(u) * 0.2) - 0.05 * Math.exp(-u * u * 18));
+    tail.push([x, u * wid * 1.45]);
+  }
+  sheet(tail);
+  // pectoral fins: rounded leaf swept back
+  const leaf = (sg) => {
+    const pts = [[len * 0.17, sg * wid * 0.55]];
+    for (let i = 0; i <= 8; i++) {
+      const u = i / 8;
+      const w = Math.sin(u * Math.PI);
+      pts.push([len * 0.17 - u * len * 0.2 - w * 0.0, sg * (wid * 0.55 + w * wid * 0.95 + u * wid * 0.25)]);
+    }
+    pts.push([len * 0.0, sg * wid * 0.6]);
+    sheet(pts);
+  };
+  leaf(1);
+  leaf(-1);
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute("aFin", new THREE.Float32BufferAttribute(fin, 1));
   g.setIndex(idx);
   g.computeVertexNormals();
+  // fix normals on flat sheets so they face the camera
+  const n = g.getAttribute("normal");
+  for (let i = 0; i < fin.length; i++) if (fin[i] > 0.5) n.setXYZ(i, 0, 0, 1);
   return g;
 }
 
@@ -102,10 +146,10 @@ export function mountPond(canvas) {
   const mk = (n, len, wid, big) => {
     const out = [];
     const palettes = [
-      [0xf2efe8, 0xe0532a],
-      [0xe9e4da, 0x222222],
-      [0xf4a23b, 0xfff2dc],
-      [0xe0532a, 0xf3efe6],
+      [0xf1ede4, 0xe2562b, 0x1b1b1d],
+      [0xf1ede4, 0xe2562b, 0xe2562b],
+      [0xefe9dc, 0x2a2a2c, 0xe2562b],
+      [0xf0a13b, 0xf6efe0, 0xc7421f],
     ];
     for (let i = 0; i < n; i++) {
       const pal = palettes[(Math.random() * palettes.length) | 0];
@@ -121,18 +165,20 @@ export function mountPond(canvas) {
           uLen: { value: len },
           uBase: { value: new THREE.Color(pal[0]) },
           uPatch: { value: new THREE.Color(pal[1]) },
+          uDark: { value: new THREE.Color(pal[2]) },
           uSeed: { value: Math.random() * 20 },
         },
       });
       const m = new THREE.Mesh(fishGeometry(len, wid), mat);
       m.position.set(Math.random() * innerWidth, Math.random() * innerHeight, big ? 1 : 0);
+      m.scale.setScalar(Math.min(1, Math.max(0.55, innerWidth / 1200)));
       scene.add(m);
       out.push({ m, mat, a: Math.random() * 6.28, v: 30 + Math.random() * 25, turn: 0, big, len });
     }
     return out;
   };
-  const koi = mk(3 + ((Math.random() * 4) | 0), 150, 17, true);
-  const fry = mk(9 + ((Math.random() * 7) | 0), 44, 5, false);
+  const koi = mk(3 + ((Math.random() * 4) | 0), 118, 15, true);
+  const fry = mk(9 + ((Math.random() * 7) | 0), 34, 4.2, false);
   const all = [...koi, ...fry];
   const mouse = { x: -1e4, y: -1e4, still: 0, moved: 0 };
 
@@ -191,7 +237,7 @@ export function mountPond(canvas) {
       const p = f.m.position;
       let speed = f.v;
       let target = f.a + Math.sin(time * 0.4 + f.mat.uniforms.uSeed.value) * 0.5;
-      const margin = 160;
+      const margin = 120;
       if (p.x < margin || p.x > innerWidth - margin || p.y < margin || p.y > innerHeight - margin) target = Math.atan2(innerHeight / 2 - p.y, innerWidth / 2 - p.x);
       if (f.big && still && mouse.x > -1000) {
         const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);

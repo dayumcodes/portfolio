@@ -8,7 +8,7 @@ export const PROFILE = {
   github: "https://github.com/dayumcodes",
   linkedin: "https://www.linkedin.com/in/mohammed-fuzail-2k24",
   x: "https://x.com/mazino213",
-  avatar: "https://github.com/dayumcodes.png",
+  avatar: "/v2/avatar.png",
 };
 
 export const JOBS = [

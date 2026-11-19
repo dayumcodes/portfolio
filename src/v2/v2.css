@@ -15,7 +15,7 @@
 
 :root {
   --bg: #06080b;
-  --loader-bg: #1a1d21;
+  --loader-bg: #212428;
   --dot: #121418;
   --signature: #3b4048;
   --text: #c3c9d1;
@@ -140,32 +140,34 @@ html[data-project="open"] .page {
 }
 .signature {
   width: 520px;
-  height: auto;
+  height: 100px;
   color: var(--signature);
   pointer-events: none;
   z-index: 0;
   position: absolute;
-  top: -122px;
+  top: -76px;
   left: -28px;
   overflow: visible;
 }
-.signature path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.signature-word {
+  font-family: var(--sans);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 92px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  display: inline-block;
+  padding-right: 14px;
+  transform: skewX(-8deg);
+  -webkit-mask-image: linear-gradient(90deg, #000 0 100%);
+  clip-path: inset(0 100% 0 0);
 }
-html[data-intro] .signature path {
-  stroke-dasharray: var(--len) calc(var(--len) + 40);
-  stroke-dashoffset: calc(var(--len) + 20);
+html[data-intro="done"] .signature-word {
+  animation: sig-wipe 1.6s 0.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) both;
 }
-html[data-intro="done"] .signature path {
-  animation: sig-write var(--dur) var(--delay) cubic-bezier(0.45, 0.05, 0.55, 0.95) both;
-}
-@keyframes sig-write {
+@keyframes sig-wipe {
   to {
-    stroke-dashoffset: 0;
+    clip-path: inset(0 -4% 0 0);
   }
 }
 .header {
@@ -285,8 +287,8 @@ html[data-intro="done"] .signature path {
 }
 @media (max-width: 560px) {
   .signature {
-    width: 380px;
-    top: -72px;
+    width: 320px;
+    top: -58px;
     left: -18px;
   }
   .name {
@@ -457,13 +459,13 @@ html[data-intro="done"] .signature path {
 .card-reflection {
   aspect-ratio: 1.02;
   object-fit: cover;
-  opacity: 0.14;
+  opacity: 0.12;
   filter: blur(2px) saturate(0.8);
   pointer-events: none;
   border-radius: 18px;
   width: 100%;
   position: absolute;
-  top: 3px;
+  top: 44px;
   left: 0;
   transform: scaleY(-1);
   -webkit-mask-image: linear-gradient(#0000 80%, #000000d9 100%);
@@ -1260,4 +1262,16 @@ html[data-intro="done"] .contact {
   display: block;
   position: absolute;
   inset: 0;
+}
+
+@media (max-width: 560px) {
+  .signature-word {
+    font-size: 70px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-intro="done"] .signature-word {
+    animation: none;
+    clip-path: none;
+  }
 }
