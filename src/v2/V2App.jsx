@@ -179,10 +179,10 @@ function Scene() {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
       const narrow = vw < 860;
-      const CW = narrow ? Math.min(vw * 0.74, 300) : Math.min(vw * 0.34, 470);
+      const CW = narrow ? Math.min(vw * 0.7, 250) : Math.min(vw * 0.34, 470);
       const SP = narrow ? vw * 0.88 : Math.max(CW + 70, vw * 0.16 + CW * 0.55);
       const fx = (narrow ? vw * 0.5 : vw * 0.66) - CW / 2 + mouse.current.x * 16;
-      const fy = narrow ? vh * 0.62 : vh * 0.47 + mouse.current.y * 9;
+      const fy = narrow ? vh * 0.7 : vh * 0.47 + mouse.current.y * 9;
 
       if (stripRef.current) {
         stripRef.current.style.transform = `translate3d(${fx - p * SP}px, ${fy}px, 0)`;
