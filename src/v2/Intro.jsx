@@ -601,10 +601,30 @@ export function run3D(overlay, { reduce, onStage, onDone }) {
     return () => cleanup();
   }
 
+  let slow = 0;
+  let frames = 0;
+  let adapted = false;
   const loop = (now) => {
-    const dt = lastNow ? Math.min((now - lastNow) / 1000, 1 / 20) : 1 / 60;
+    // wall-clock driven: the intro lasts the same time at any frame rate
+    let dt = lastNow ? Math.min((now - lastNow) / 1000, 0.3) : 1 / 60;
     lastNow = now;
-    step(dt);
+    frames++;
+    if (!adapted && frames > 8) {
+      if (dt > 1 / 24) slow++;
+      if (slow > 6) {
+        adapted = true;
+        renderer.setPixelRatio(0.6);
+        renderer.setSize(innerWidth, innerHeight, false);
+        key.shadow.mapSize.set(1024, 1024);
+        key.shadow.map?.dispose();
+        key.shadow.map = null;
+      }
+    }
+    while (dt > 1e-6 && !finished) {
+      const h = Math.min(dt, 1 / 60);
+      step(h);
+      dt -= h;
+    }
     draw();
     if (!finished) raf = requestAnimationFrame(loop);
   };
