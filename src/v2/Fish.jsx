@@ -324,7 +324,7 @@ export function mountPond(canvas) {
     }
     document.querySelectorAll(".card-meta, .slider, .contact, .card-eyebrow").forEach((el) => {
       const r = el.getBoundingClientRect();
-      if (r.width && r.right > 0 && r.left < innerWidth) out.push({ l: r.left - 12, r: r.right + 12, t: r.top - 8, b: r.bottom + 10 });
+      if (r.width && r.right > 0 && r.left < innerWidth) out.push({ l: r.left - 12, r: r.right + 12, t: r.top - 8, b: r.bottom + (el.classList.contains("slider") ? 46 : 10) });
     });
     zones = out;
   };
