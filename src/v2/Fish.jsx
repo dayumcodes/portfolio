@@ -1,150 +1,238 @@
-import React, { useEffect, useRef } from "react";
+// Koi pond: procedural fish meshes bent along a spine in the vertex shader,
+// plus a ripple height-field rendered as soft light rings. Original code.
+import * as THREE from "three";
 
-// Koi pond: original procedural side-view koi, wandering on a 2D canvas.
-const PALETTES = [
-  { body: "#e9e5db", fin: "#d9d4c8", patch: "#d4571f" }, // kohaku
-  { body: "#d4571f", fin: "#b84718", patch: "#26262b" }, // hi + sumi
-  { body: "#d9a13b", fin: "#c08727", patch: "#e9e5db" }, // yamabuki
-  { body: "#e9e5db", fin: "#d9d4c8", patch: "#c94f24" },
-  { body: "#c94f24", fin: "#a53d16", patch: "#e9e5db" },
-  { body: "#e9e5db", fin: "#cfc9bb", patch: "#2b2b30" }, // shiro + sumi
-];
-
-function spawn(w, h, i) {
-  return {
-    x: Math.random() * w,
-    y: Math.random() * h,
-    a: Math.random() * Math.PI * 2,
-    sp: 16 + Math.random() * 20, // px/s
-    s: 15 + Math.random() * 14, // base size
-    ph: Math.random() * Math.PI * 2,
-    wag: 5 + Math.random() * 3,
-    depth: 0.55 + Math.random() * 0.45,
-    c: PALETTES[i % PALETTES.length],
-  };
+export function canRunPond() {
+  try {
+    const c = document.createElement("canvas");
+    return !!c.getContext("webgl2") && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
 }
 
-export default function Fish({ count = 7 }) {
-  const ref = useRef(null);
+const FISH_VERT = `
+uniform float uTime, uPhase, uSpeed, uLen;
+varying vec3 vN; varying vec2 vUv; varying float vT;
+void main(){
+  vec3 p = position;
+  float t = clamp((p.x / uLen) + 0.5, 0.0, 1.0); // 0 tail .. 1 head
+  float amp = (1.0 - t) * (1.0 - t) * (0.1 + 0.18 * uSpeed) * uLen;
+  float w = sin(uTime * (3.0 + 5.0 * uSpeed) + uPhase + t * 5.0);
+  p.z += amp * w;
+  vec3 n = normal;
+  float slope = amp * 0.0;
+  vN = normalMatrix * n;
+  vUv = uv; vT = t;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}`;
+const FISH_FRAG = `
+precision mediump float;
+uniform vec3 uBase, uPatch; uniform float uSeed;
+varying vec3 vN; varying vec2 vUv; varying float vT;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+void main(){
+  float pt = smoothstep(0.52, 0.6, n(vec2(vT*5.0+uSeed, vUv.y*3.0+uSeed*2.0)));
+  vec3 c = mix(uBase, uPatch, pt);
+  float scale = 0.5+0.5*sin(vT*90.0)*sin(vUv.y*60.0);
+  c *= 0.92 + 0.08 * scale;
+  float l = 0.55 + 0.45 * clamp(dot(normalize(vN), normalize(vec3(-0.3,0.8,0.6))), 0.0, 1.0);
+  gl_FragColor = vec4(c * l, 0.92);
+}`;
 
-  useEffect(() => {
-    const canvas = ref.current;
-    const ctx = canvas.getContext("2d");
-    let raf;
-    let w = 0;
-    let h = 0;
+function fishGeometry(len, wid) {
+  // body: lathe-like along x, flattened in z
+  const seg = 28;
+  const ring = 14;
+  const pos = [];
+  const uv = [];
+  const idx = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg; // 0 tail .. 1 head
+    const x = (t - 0.5) * len;
+    const prof = Math.sin(Math.pow(t, 0.7) * Math.PI) ** 0.8 * (0.2 + 0.8 * Math.min(1, t * 2.2));
+    const r = wid * (t < 0.15 ? 0.12 + t * 2.4 : prof);
+    for (let j = 0; j <= ring; j++) {
+      const a = (j / ring) * Math.PI * 2;
+      pos.push(x, Math.cos(a) * r, Math.sin(a) * r * 0.55);
+      uv.push(t, j / ring);
+    }
+  }
+  for (let i = 0; i < seg; i++)
+    for (let j = 0; j < ring; j++) {
+      const a = i * (ring + 1) + j;
+      const b = a + ring + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  // tail fan + pectoral fins (flat triangles)
+  const add = (pts) => {
+    const base = pos.length / 3;
+    pts.forEach(([x, y, z]) => {
+      pos.push(x, y, z);
+      uv.push(x / len + 0.5, 0.5);
+    });
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 1);
+  };
+  add([[-len * 0.46, 0, 0], [-len * 0.62, wid * 1.3, 0], [-len * 0.6, -wid * 1.3, 0]]);
+  add([[-len * 0.46, 0, 0], [-len * 0.66, wid * 0.55, 0], [-len * 0.66, -wid * 0.55, 0]]);
+  add([[len * 0.16, wid * 0.5, 0], [len * 0.04, wid * 1.5, 0], [-len * 0.06, wid * 0.7, 0]]);
+  add([[len * 0.16, -wid * 0.5, 0], [len * 0.04, -wid * 1.5, 0], [-len * 0.06, -wid * 0.7, 0]]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
 
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = canvas.clientWidth;
-      h = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.round(w * dpr));
-      canvas.height = Math.max(1, Math.round(h * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    window.addEventListener("resize", resize);
+export function mountPond(canvas) {
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  const size = () => renderer.setSize(innerWidth, innerHeight, false);
+  size();
+  const scene = new THREE.Scene();
+  const cam = new THREE.OrthographicCamera(0, innerWidth, innerHeight, 0, -100, 100);
+  const fit = () => {
+    cam.right = innerWidth;
+    cam.top = innerHeight;
+    cam.updateProjectionMatrix();
+  };
+  const mk = (n, len, wid, big) => {
+    const out = [];
+    const palettes = [
+      [0xf2efe8, 0xe0532a],
+      [0xe9e4da, 0x222222],
+      [0xf4a23b, 0xfff2dc],
+      [0xe0532a, 0xf3efe6],
+    ];
+    for (let i = 0; i < n; i++) {
+      const pal = palettes[(Math.random() * palettes.length) | 0];
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: FISH_VERT,
+        fragmentShader: FISH_FRAG,
+        transparent: true,
+        side: THREE.DoubleSide,
+        uniforms: {
+          uTime: { value: 0 },
+          uPhase: { value: Math.random() * 6 },
+          uSpeed: { value: 0.3 },
+          uLen: { value: len },
+          uBase: { value: new THREE.Color(pal[0]) },
+          uPatch: { value: new THREE.Color(pal[1]) },
+          uSeed: { value: Math.random() * 20 },
+        },
+      });
+      const m = new THREE.Mesh(fishGeometry(len, wid), mat);
+      m.position.set(Math.random() * innerWidth, Math.random() * innerHeight, big ? 1 : 0);
+      scene.add(m);
+      out.push({ m, mat, a: Math.random() * 6.28, v: 30 + Math.random() * 25, turn: 0, big, len });
+    }
+    return out;
+  };
+  const koi = mk(3 + ((Math.random() * 4) | 0), 150, 17, true);
+  const fry = mk(9 + ((Math.random() * 7) | 0), 44, 5, false);
+  const all = [...koi, ...fry];
+  const mouse = { x: -1e4, y: -1e4, still: 0, moved: 0 };
 
-    const n = window.innerWidth < 860 ? Math.min(4, count) : count;
-    const fish = [];
-    for (let i = 0; i < n; i++) fish.push(spawn(window.innerWidth, window.innerHeight, i));
+  // ripples
+  const ripples = [];
+  const ringMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uR: { value: 0 }, uA: { value: 0 } },
+    vertexShader: "varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+    fragmentShader: "varying vec2 vUv; uniform float uR,uA; void main(){ float d=length(vUv-0.5)*2.0; float ring=smoothstep(0.06,0.0,abs(d-uR)); gl_FragColor=vec4(0.85,0.92,1.0,ring*uA*0.35);}",
+  });
+  const ripple = (x, y) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), ringMat.clone());
+    m.position.set(x, y, 5);
+    m.scale.setScalar(10);
+    scene.add(m);
+    ripples.push({ m, t: 0 });
+  };
 
-    const bodyPath = (c, L, W) => {
-      c.beginPath();
-      c.moveTo(L * 0.52, 0);
-      c.quadraticCurveTo(L * 0.3, -W, -L * 0.12, -W * 0.66);
-      c.quadraticCurveTo(-L * 0.38, -W * 0.38, -L * 0.44, 0);
-      c.quadraticCurveTo(-L * 0.38, W * 0.38, -L * 0.12, W * 0.66);
-      c.quadraticCurveTo(L * 0.3, W, L * 0.52, 0);
-      c.closePath();
-    };
-
-    let last = performance.now();
-    const tick = (now) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      ctx.clearRect(0, 0, w, h);
-
-      for (const f of fish) {
-        // wander, then steer home when out of the pond
-        f.a += Math.sin(now * 0.00045 * f.wag + f.ph) * 0.011 + (Math.random() - 0.5) * 0.008;
-        const m = 90;
-        if (f.x < -m) f.a = 0;
-        else if (f.x > w + m) f.a = Math.PI;
-        if (f.y < -m) f.a = Math.PI / 2;
-        else if (f.y > h + m) f.a = -Math.PI / 2;
-
-        f.x += Math.cos(f.a) * f.sp * f.depth * dt;
-        f.y += Math.sin(f.a) * f.sp * f.depth * dt + Math.sin(now * 0.0011 + f.ph) * 6 * dt;
-
-        const wag = Math.sin(now * 0.002 * f.wag + f.ph);
-        const s = f.s * f.depth;
-        const L = s * 3.1;
-        const W = s * 0.66;
-
-        ctx.save();
-        ctx.translate(f.x, f.y);
-        ctx.rotate(f.a + wag * 0.1);
-        ctx.globalAlpha = 0.35 + f.depth * 0.55;
-
-        // tail
-        const tw = wag * s * 0.55;
-        ctx.beginPath();
-        ctx.moveTo(-L * 0.4, 0);
-        ctx.quadraticCurveTo(-L * 0.66, tw - W * 0.55, -L * 0.98, tw * 1.5 - W * 0.42);
-        ctx.quadraticCurveTo(-L * 0.8, tw * 0.55, -L * 0.98, tw * 1.5 + W * 0.42);
-        ctx.quadraticCurveTo(-L * 0.66, tw + W * 0.55, -L * 0.4, 0);
-        ctx.closePath();
-        ctx.fillStyle = f.c.fin;
-        ctx.fill();
-
-        // pectoral fins
-        ctx.globalAlpha *= 0.7;
-        ctx.beginPath();
-        ctx.ellipse(L * 0.06, -W * 0.85, s * 0.5, s * 0.2, -0.5 + wag * 0.25, 0, Math.PI * 2);
-        ctx.ellipse(L * 0.06, W * 0.85, s * 0.5, s * 0.2, 0.5 - wag * 0.25, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha /= 0.7;
-
-        // body
-        bodyPath(ctx, L, W);
-        ctx.fillStyle = f.c.body;
-        ctx.fill();
-
-        // patches, clipped to the body
-        ctx.save();
-        bodyPath(ctx, L, W);
-        ctx.clip();
-        ctx.globalAlpha *= 0.92;
-        ctx.fillStyle = f.c.patch;
-        ctx.beginPath();
-        ctx.ellipse(L * 0.18, -W * 0.25, s * 0.55, s * 0.4, 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(-L * 0.12, W * 0.3, s * 0.45, s * 0.35, -0.4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        // eyes
-        ctx.fillStyle = "#101114";
-        ctx.beginPath();
-        ctx.arc(L * 0.38, -W * 0.22, s * 0.075, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(L * 0.38, W * 0.22, s * 0.075, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
+  const down = (e) => {
+    ripple(e.clientX, innerHeight - e.clientY);
+    for (const f of all) {
+      const dx = f.m.position.x - e.clientX;
+      const dy = f.m.position.y - (innerHeight - e.clientY);
+      const d = Math.hypot(dx, dy);
+      if (d < 300) {
+        f.flee = 1.2;
+        f.a = Math.atan2(dy, dx);
       }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
+    }
+  };
+  const move = (e) => {
+    mouse.x = e.clientX;
+    mouse.y = innerHeight - e.clientY;
+    mouse.moved = performance.now();
+  };
+  addEventListener("pointerdown", down, { passive: true });
+  addEventListener("pointermove", move, { passive: true });
+  const onResize = () => {
+    size();
+    fit();
+  };
+  addEventListener("resize", onResize);
 
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-    };
-  }, [count]);
-
-  return <canvas ref={ref} className="v2-fish" aria-hidden="true" />;
+  let raf = 0;
+  let last = 0;
+  let time = 0;
+  setTimeout(() => canvas.setAttribute("data-ready", ""), 300);
+  const loop = (now) => {
+    const dt = Math.min((now - last) / 1000 || 0.016, 0.05);
+    last = now;
+    time += dt;
+    const still = now - mouse.moved > 700;
+    for (const f of all) {
+      const p = f.m.position;
+      let speed = f.v;
+      let target = f.a + Math.sin(time * 0.4 + f.mat.uniforms.uSeed.value) * 0.5;
+      const margin = 160;
+      if (p.x < margin || p.x > innerWidth - margin || p.y < margin || p.y > innerHeight - margin) target = Math.atan2(innerHeight / 2 - p.y, innerWidth / 2 - p.x);
+      if (f.big && still && mouse.x > -1000) {
+        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
+        if (d < 420 && d > 40) target = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+      }
+      if (f.flee > 0) {
+        f.flee -= dt;
+        speed *= 3.4;
+      }
+      let da = target - f.a;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      f.a += da * Math.min(1, dt * (f.flee > 0 ? 6 : 1.6));
+      p.x += Math.cos(f.a) * speed * dt;
+      p.y += Math.sin(f.a) * speed * dt;
+      f.m.rotation.z = f.a;
+      f.mat.uniforms.uTime.value = time;
+      f.mat.uniforms.uSpeed.value = Math.min(1, speed / 80);
+    }
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.t += dt;
+      const k = r.t / 1.8;
+      r.m.scale.setScalar(10 + 360 * k);
+      r.m.material.uniforms.uR.value = 0.15 + 0.8 * k;
+      r.m.material.uniforms.uA.value = Math.max(0, 1 - k);
+      if (k >= 1) {
+        scene.remove(r.m);
+        r.m.geometry.dispose();
+        r.m.material.dispose();
+        ripples.splice(i, 1);
+      }
+    }
+    renderer.render(scene, cam);
+    raf = requestAnimationFrame(loop);
+  };
+  raf = requestAnimationFrame(loop);
+  return () => {
+    cancelAnimationFrame(raf);
+    removeEventListener("pointerdown", down);
+    removeEventListener("pointermove", move);
+    removeEventListener("resize", onResize);
+    renderer.dispose();
+  };
 }
