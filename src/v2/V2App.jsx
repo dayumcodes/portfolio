@@ -318,6 +318,61 @@ function ResumeWindow() {
 /* ------------------------------------------------------------------ */
 /* contact                                                             */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* support window: UPI QR, opened from the contact menu                */
+/* ------------------------------------------------------------------ */
+function SupportWindow() {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef(0);
+
+  useEffect(() => {
+    const open = () => setShown(true);
+    addEventListener("v2:support", open);
+    return () => removeEventListener("v2:support", open);
+  }, []);
+
+  useEffect(() => {
+    if (!shown) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setShown(false);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [shown]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  if (!shown) return null;
+
+  const copy = async () => {
+    thunk();
+    const ok = await copyText(PROFILE.upi);
+    if (ok) {
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1800);
+    }
+  };
+
+  return (
+    <div className="support" role="dialog" aria-modal="true" aria-label="Support my work">
+      <div className="support-backdrop" onClick={() => setShown(false)} />
+      <div className="support-card">
+        <button type="button" className="support-close" aria-label="Close" onClick={() => setShown(false)}>
+          esc
+        </button>
+        <p className="support-title">support my work</p>
+        <img className="support-qr" src="/upi-qr.jpg" alt="UPI QR code to support Fuzail" />
+        <p className="support-id">{PROFILE.upi}</p>
+        <button type="button" className="support-copy" onClick={copy}>
+          {copied ? "copied" : "copy upi id"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const ico = (c) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {c}
@@ -341,6 +396,9 @@ const CONTACT_ICONS = {
     </>,
   ),
   check: ico(<path d="m5 12.5 4.5 4.5L19 7.5" />),
+  support: ico(
+    <path d="M12 21s-8-5.1-10-9.7C.6 7.9 2.8 4.5 6.2 4.5c2.1 0 3.9 1.2 4.8 3 .9-1.8 2.7-3 4.8-3 3.4 0 5.6 3.4 4.2 6.8C18 15.9 12 21 12 21Z" />,
+  ),
   resume: ico(
     <>
       <path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z" />
@@ -353,6 +411,7 @@ const WAYS = [
   { id: "github", label: "github", href: PROFILE.github, key: "g" },
   { id: "x", label: "x / twitter", href: PROFILE.x, key: "x" },
   { id: "resume", label: "resume", key: "r" },
+  { id: "support", label: "support my work", key: "s" },
   { id: "email", label: "copy email", key: "c" },
 ];
 
@@ -432,6 +491,9 @@ function Contact() {
     thunk();
     if (w.id === "resume") {
       dispatchEvent(new CustomEvent("v2:resume"));
+      setOpen(false);
+    } else if (w.id === "support") {
+      dispatchEvent(new CustomEvent("v2:support"));
       setOpen(false);
     } else if (w.id === "email") {
       const ok = await copyText(PROFILE.email);
@@ -980,6 +1042,7 @@ function Page() {
       </div>
       <Contact />
       <ResumeWindow />
+      <SupportWindow />
       <div className="slider" ref={sliderRef} role="slider" tabIndex={0} aria-label="Scroll through projects" aria-valuemin={0} aria-valuemax={100} aria-valuenow={0} aria-valuetext="Intro">
         <div className="slider-well">
           <span className="slider-groove" />
