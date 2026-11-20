@@ -9,6 +9,7 @@ export const PROFILE = {
   linkedin: "https://www.linkedin.com/in/mohammed-fuzail-2k24",
   x: "https://x.com/mazino213",
   avatar: "/v2/avatar.png",
+  upi: "mfuzail7820@okicici",
 };
 
 export const JOBS = [
