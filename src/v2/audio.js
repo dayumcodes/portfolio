@@ -52,3 +52,25 @@ export function thunk() {
   o.start(now);
   o.stop(now + 0.18);
 }
+
+// The visitor-chosen paper page-turn sample, played when the slider turns to a
+// new panel. One element, restarted per turn, so plays never overlap; a short
+// throttle stops machine-gun repeats while wheeling or scrubbing.
+let flipEl = null;
+let flipAt = 0;
+export function pageFlip() {
+  if (quiet()) return;
+  const now = performance.now();
+  if (now - flipAt < 300) return;
+  flipAt = now;
+  try {
+    if (!flipEl) {
+      flipEl = new Audio("/v2/page-flip.m4a");
+      flipEl.preload = "auto";
+      flipEl.volume = 0.55;
+    }
+    flipEl.currentTime = 0;
+    const p = flipEl.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch {}
+}
