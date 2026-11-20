@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Analytics } from '@vercel/analytics/react'
 
 // v2 is the default homepage. The original 3D portfolio (v1) is preserved
 // untouched and served under /v1.
@@ -12,6 +13,7 @@ if (isV1) {
     root.render(
       <React.StrictMode>
         <m.default />
+        <Analytics />
       </React.StrictMode>,
     )
   })
@@ -20,6 +22,7 @@ if (isV1) {
     root.render(
       <React.StrictMode>
         <m.default />
+        <Analytics />
       </React.StrictMode>,
     )
   })
