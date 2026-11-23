@@ -147,19 +147,19 @@ export default function V3App() {
                 <div className="tile tile-profile">
                   <span className="tile-top">
                     <img className="tile-avatar" src={PROFILE.avatar} alt="" draggable="false" />
+                    <span className="moods" role="group" aria-label="Studio lighting presets">
+                      {MOOD_LIST.map((m) => (
+                        <button key={m.id} type="button" className={`mood mood-${m.id}`} aria-pressed={mood === m.id} title={`${m.label} — ${m.hint}`} onClick={() => handleMood(m.id)}>
+                          <span aria-hidden="true" />
+                          {m.label}
+                        </button>
+                      ))}
+                    </span>
                     <span className="tile-corner">about</span>
-                  </span>
-                  <span className="moods" role="group" aria-label="Studio lighting presets">
-                    {MOOD_LIST.map((m) => (
-                      <button key={m.id} type="button" className={`mood mood-${m.id}`} aria-pressed={mood === m.id} title={`${m.label} — ${m.hint}`} onClick={() => handleMood(m.id)}>
-                        <span aria-hidden="true" />
-                        {m.label}
-                      </button>
-                    ))}
                   </span>
                   <span className="tile-text">
                     <span className="tile-name">{PROFILE.tagline}</span>
-                    <span className="tile-detail">4.5 yrs · builds with AI, ships for real users</span>
+                    <span className="tile-detail">4.5 yrs · ships for real users</span>
                   </span>
                 </div>
 
