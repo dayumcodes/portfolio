@@ -43,20 +43,29 @@ export default function V3App() {
   const studioRef = useRef(null);
   const panelRef = useRef(null);
   const dragRef = useRef(null);
-  const sceneDrag = useRef(null);
+  const movedRef = useRef(false);
   const [mood, setMood] = useState("morning");
   const [bright, setBright] = useState(78);
   const [drawer, setDrawer] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [tilt, setTilt] = useState(0);
   const [hintIdx, setHintIdx] = useState(0);
   const [bare] = useState(() => new URLSearchParams(location.search).get("bare") === "1");
 
   useEffect(() => {
     document.title = "Mohammed Fuzail — studio glass";
+    const q = new URLSearchParams(location.search);
     const studio = mountStudio(canvasRef.current, {
       images: ["/v2/cards/ramprush.jpg", "/v2/cards/calorie-ai.jpg", "/v2/cards/hud.jpg", "/v2/cards/orbit.jpg"],
+      lowfx: q.get("lowfx") === "1",
+      onBrightness: (d) =>
+        setBright((b) => {
+          const n = Math.min(100, Math.max(15, Math.round(b + d)));
+          studio.setBrightness(n / 100);
+          return n;
+        }),
     });
     studioRef.current = studio;
-    const q = new URLSearchParams(location.search);
     const m = MOOD_LIST.find((x) => x.id === q.get("mood"));
     if (m) { setMood(m.id); studio.setMood(m.id); setBright(m.level); studio.setBrightness(m.level / 100); }
     if (q.get("bright")) handleBright(Number(q.get("bright")));
@@ -95,21 +104,36 @@ export default function V3App() {
     };
   };
   const onHandleDown = (e) => {
-    dragRef.current = { x: e.clientX, y: e.clientY, ...getPanelPos() };
+    const p = getPanelPos();
+    dragRef.current = { x: e.clientX, y: e.clientY, px: p.x, py: p.y, lastT: performance.now(), vx: 0 };
+    movedRef.current = false;
+    setTilt(0);
     panelRef.current?.setAttribute("data-moving", "");
     e.currentTarget.setPointerCapture?.(e.pointerId);
   };
   const onHandleMove = (e) => {
     const d = dragRef.current;
     if (!d) return;
+    const now = performance.now();
+    const dt = Math.max(1, now - d.lastT);
+    d.vx = ((e.clientX - d.x) - (d.lastDx || 0)) / dt; // px per ms
+    d.lastDx = e.clientX - d.x;
+    d.lastT = now;
+    if (Math.abs(e.clientX - d.x) > 6 || Math.abs(e.clientY - d.y) > 6) movedRef.current = true;
     setPanelPos(
       Math.min(innerWidth * 0.4, Math.max(-innerWidth * 0.4, d.px + e.clientX - d.x)),
       Math.min(innerHeight * 0.5, Math.max(-40, d.py + e.clientY - d.y))
     );
   };
   const onHandleUp = () => {
+    const d = dragRef.current;
     dragRef.current = null;
     panelRef.current?.removeAttribute("data-moving");
+    // fling: brief inertia tilt in the throw direction, like the reference
+    if (d && Math.abs(d.vx) > 0.35) {
+      setTilt(Math.min(12, Math.max(-12, d.vx * 14)));
+      setTimeout(() => setTilt(0), 650);
+    }
   };
   const onHandleKey = (e) => {
     const step = e.shiftKey ? 24 : 8;
@@ -119,17 +143,50 @@ export default function V3App() {
     if (moves[e.key]) { setPanelPos(...moves[e.key]); e.preventDefault(); }
   };
 
-  // ---- scene drag: pull left/right anywhere on the room to change brightness
-  const onSceneDown = (e) => {
-    if (e.target !== canvasRef.current) return;
-    sceneDrag.current = { x: e.clientX, b: bright };
-  };
-  const onSceneMove = (e) => {
-    const d = sceneDrag.current;
-    if (!d) return;
-    handleBright(d.b + ((e.clientX - d.x) / innerWidth) * 130);
-  };
-  const onSceneUp = () => { sceneDrag.current = null; };
+  // ---- global keys + gestures (reference: arrows step presets/brightness,
+  //      Escape or a downward swipe closes the drawer)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "")) return;
+      if (e.target?.closest?.(".v3-handle")) return; // handle has its own keys
+      if (e.key === "Escape") {
+        if (drawer) setDrawer(false);
+        else if (collapsed) setCollapsed(false);
+        return;
+      }
+      const i = MOOD_LIST.findIndex((m) => m.id === mood);
+      if (e.key === "ArrowRight") handleMood(MOOD_LIST[(i + 1) % MOOD_LIST.length].id);
+      else if (e.key === "ArrowLeft") handleMood(MOOD_LIST[(i + MOOD_LIST.length - 1) % MOOD_LIST.length].id);
+      else if (e.key === "ArrowUp") handleBright(bright + 6);
+      else if (e.key === "ArrowDown") handleBright(bright - 6);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [mood, bright, drawer, collapsed]);
+
+  useEffect(() => {
+    let start = null;
+    const down = (e) => {
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY, drawer: !!e.target.closest?.(".v3-drawer"), hint: !!e.target.closest?.(".v3-hint") };
+    };
+    const up = (e) => {
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dy = t.clientY - start.y;
+      if (dy > 60 && Math.abs(t.clientX - start.x) < 60) {
+        if (start.drawer) setDrawer(false);
+        else if (start.hint) setCollapsed(false);
+      }
+      start = null;
+    };
+    addEventListener("touchstart", down, { passive: true });
+    addEventListener("touchend", up, { passive: true });
+    return () => {
+      removeEventListener("touchstart", down);
+      removeEventListener("touchend", up);
+    };
+  }, []);
 
   const openProject = (p) => {
     if (p.internal) location.href = p.internal;
@@ -143,16 +200,19 @@ export default function V3App() {
     <div
       className={`v3 m-${mood}`}
       data-bare={bare ? "" : undefined}
-      onPointerDown={onSceneDown}
-      onPointerMove={onSceneMove}
-      onPointerUp={onSceneUp}
-      onPointerCancel={onSceneUp}
     >
       <canvas ref={canvasRef} className="v3-canvas" aria-hidden="true" />
       <div className="v3-tint" aria-hidden="true" style={{ opacity: (1 - bright / 100) * 0.8 }} />
+      <div className="v3-vignette" aria-hidden="true" />
 
       <div className="v3-coords">
-        <section className="v3-panel" ref={panelRef} aria-label="Portfolio and studio lighting controls">
+        <section
+          className="v3-panel"
+          ref={panelRef}
+          data-collapsed={collapsed ? "" : undefined}
+          style={{ "--panel-tilt": `${tilt}deg` }}
+          aria-label="Portfolio and studio lighting controls"
+        >
           <header className="v3-heading">
             <h1>
               <button
@@ -164,11 +224,20 @@ export default function V3App() {
                 onPointerUp={onHandleUp}
                 onPointerCancel={onHandleUp}
                 onKeyDown={onHandleKey}
+                onClick={() => {
+                  if (!movedRef.current) { setPanelPos(0, 0); setTilt(0); }
+                }}
               >
                 {PROFILE.name}
               </button>
             </h1>
-            <button type="button" className="v3-toggle" aria-label="Re-centre panel" title="Re-centre panel" onClick={() => setPanelPos(0, 0)}>
+            <button
+              type="button"
+              className="v3-toggle"
+              aria-label={collapsed ? "Open panel" : "Collapse panel"}
+              title={collapsed ? "Open panel" : "Collapse panel"}
+              onClick={() => setCollapsed((c) => !c)}
+            >
               <span aria-hidden="true" />
             </button>
           </header>

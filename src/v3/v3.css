@@ -45,9 +45,18 @@
 .m-afternoon .v3-tint { background: #0a0f0c; }
 .m-thunderstorm .v3-tint { background: #0a1218; }
 
+/* cinematic vignette over the scene, under the panel */
+.v3-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 120% 105% at 50% 42%, transparent 52%, rgb(3 7 9 / 44%) 100%);
+}
+
 /* bare mode: scene only (used to render the preset thumbnails) */
 .v3[data-bare] .v3-coords,
 .v3[data-bare] .v3-versions,
+.v3[data-bare] .v3-vignette,
 .v3[data-bare] .v3-credit { display: none; }
 
 /* ---- floating panel ---------------------------------------------------- */
@@ -66,8 +75,18 @@
   left: 50%;
   top: max(env(safe-area-inset-top), clamp(10px, 1.8vh, 20px));
   translate: -50% 0;
-  transform: translate(var(--panel-x), var(--panel-y));
+  transform: translate(var(--panel-x), var(--panel-y)) rotate(var(--panel-tilt, 0deg));
   width: min(700px, calc(100% - 28px));
+  transition: transform 0.45s cubic-bezier(0.2, 1.4, 0.3, 1);
+}
+.v3-panel[data-moving] { transition: none; }
+
+/* collapsed: body folds away, header chip stays (reference behaviour) */
+.v3-panel[data-collapsed] .v3-scroll {
+  display: none;
+}
+.v3-panel[data-collapsed] .v3-heading {
+  border-bottom: none;
 }
 
 .v3-scroll {

@@ -2,6 +2,11 @@
 // mood of threeui.com/studio-glass. All geometry is procedural three.js; no
 // assets or code were taken from the reference site.
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 const MOODS = {
   morning: {
@@ -29,8 +34,13 @@ const MOODS = {
 const WOOD = 0x96633a, WOOD_D = 0x7a4f2c, WALL = 0x2f4f47, WALL_D = 0x254038;
 
 function box(w, h, d, color, opts = {}) {
+  // rounded edges take the hard CG edge off furniture; falls back for tiny pieces
+  const r = Math.min(0.035, w / 4, h / 4, d / 4);
+  const geo = r > 0.004
+    ? new RoundedBoxGeometry(w, h, d, 2, r)
+    : new THREE.BoxGeometry(w, h, d);
   const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
+    geo,
     new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.8, metalness: opts.metal ?? 0.05, ...opts.mat })
   );
   m.castShadow = opts.cast ?? true;
@@ -45,6 +55,54 @@ function cyl(rt, rb, h, color, opts = {}) {
   m.castShadow = opts.cast ?? true;
   m.receiveShadow = opts.recv ?? true;
   return m;
+}
+
+// Floor planks: per-plank tone variation, seams and grain streaks.
+function plankTexture() {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 512;
+  const g = c.getContext("2d");
+  const tones = ["#7d5231", "#83562f", "#754c2b", "#7a4f2c", "#855a36"];
+  for (let y = 0; y < 512; y += 64) {
+    for (let x = 0; x < 512; x += 256) {
+      const off = (y / 64) % 2 ? 128 : 0;
+      g.fillStyle = tones[((x + y) / 64 + y) % tones.length | 0] || tones[0];
+      g.fillRect((x + off) % 512, y, 254, 62);
+      if (x + off >= 512) { g.fillRect(x + off - 512, y, 254, 62); }
+    }
+  }
+  g.strokeStyle = "rgba(35, 20, 8, 0.55)";
+  g.lineWidth = 2;
+  for (let y = 0; y <= 512; y += 64) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
+  for (let i = 0; i < 220; i++) {
+    g.strokeStyle = `rgba(50, 30, 12, ${0.05 + (i % 4) * 0.02})`;
+    g.lineWidth = 1;
+    const y0 = (i * 41) % 512, x0 = (i * 97) % 512;
+    g.beginPath(); g.moveTo(x0, y0); g.bezierCurveTo(x0 + 40, y0 + 3, x0 + 90, y0 - 3, x0 + 150, y0 + 2); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(5, 5);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Subtle plaster noise so walls are not dead flat.
+function wallTexture(base) {
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    const v = (i * 37) % 100;
+    g.fillStyle = v < 50 ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.03)";
+    g.fillRect((i * 61) % 256, (i * 137) % 256, 2 + (i % 3), 1 + (i % 2));
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(3, 2);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // Horizontal wood-grain texture for desk and console tops.
@@ -108,7 +166,7 @@ function artTexture() {
   return t;
 }
 
-export function mountStudio(canvas, { images = [], onReady } = {}) {
+export function mountStudio(canvas, { images = [], onReady, onBrightness, onPresetStep, lowfx } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
@@ -123,30 +181,52 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   camera.position.set(0, 2.1, 9.4);
   const camTarget = new THREE.Vector3(0, 1.5, 0);
 
+  // post: gentle bloom sells the lamp / monitor / sky glow like the reference
+  // lowfx (thumbnail renders, weak GPUs): plain rendering, cheaper shadows
+  const useFx = !lowfx;
+  if (lowfx) {
+    renderer.setPixelRatio(1);
+  }
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.38, 0.65, 0.8);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
   // ---- room shell -------------------------------------------------------
   const room = new THREE.Group();
   scene.add(room);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(30, 30),
-    new THREE.MeshStandardMaterial({ color: WOOD_D, roughness: 0.9 })
+    new THREE.MeshStandardMaterial({ color: 0xb08050, map: plankTexture(), roughness: 0.72 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   room.add(floor);
 
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 12), new THREE.MeshStandardMaterial({ color: WALL, roughness: 0.95 }));
+  // CC0 (Poly Haven) roughness maps for tactile light response
+  const texLoader = new THREE.TextureLoader();
+  const roughMap = (url, rx, ry) => {
+    const t = texLoader.load(url);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    return t;
+  };
+  floor.material.roughnessMap = roughMap("/v3/tex/floor_rough.jpg", 5, 5);
+
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(30, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, map: wallTexture("#2f4f47"), roughness: 0.95 }));
   backWall.position.set(0, 6, -6);
   backWall.receiveShadow = true;
   room.add(backWall);
 
-  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(24, 12), new THREE.MeshStandardMaterial({ color: WALL_D, roughness: 0.95 }));
+  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(24, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, map: wallTexture("#254038"), roughness: 0.95 }));
   leftWall.rotation.y = Math.PI / 2;
   leftWall.position.set(-8.4, 6, 0);
   leftWall.receiveShadow = true;
   room.add(leftWall);
 
-  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(24, 12), new THREE.MeshStandardMaterial({ color: 0x3d2f24, roughness: 0.95 }));
+  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(24, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, map: wallTexture("#3d2f24"), roughness: 0.95 }));
   rightWall.rotation.y = -Math.PI / 2;
   rightWall.position.set(8.4, 6, 0);
   rightWall.receiveShadow = true;
@@ -252,6 +332,7 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   const deskTop = box(7.4, 0.16, 2.6, WOOD, { rough: 0.55 });
   deskTop.material.map = woodTexture();
   deskTop.material.map.repeat.set(2, 1);
+  deskTop.material.roughnessMap = roughMap("/v3/tex/walnut_rough.jpg", 2, 1);
   deskTop.material.needsUpdate = true;
   deskTop.position.y = 1.42;
   desk.add(deskTop);
@@ -525,10 +606,12 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   const sun = new THREE.DirectionalLight(0xffd9a8, 2.4);
   sun.position.set(-6, 4.2, -3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -8; sun.shadow.camera.right = 8;
   sun.shadow.camera.top = 8; sun.shadow.camera.bottom = -8;
   sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  sun.shadow.radius = 6;
   scene.add(sun);
   const fill = new THREE.AmbientLight(0xffffff, 0.22);
   const frontFill = new THREE.DirectionalLight(0xcfe0e8, 0.4);
@@ -579,10 +662,123 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   };
   addEventListener("pointermove", onPointer, { passive: true });
 
+  // ---- room interactions: pick, drag, brush -------------------------------
+  // (the reference's interaction set, re-implemented on our own objects)
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const castAt = (e, targets) => {
+    const r = canvas.getBoundingClientRect();
+    if (!r.width) return null;
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hits = ray.intersectObjects(targets, true);
+    return hits[0] || null;
+  };
+
+  // liftable desk objects land where they are dropped
+  const liftables = [kb, mouse, holder, nb].map((obj) => ({ obj, base: obj.position.clone(), baseRotY: obj.rotation.y }));
+  const liftParents = [kb, mouse, holder, nb];
+  const interactives = [blinds, chair, monitor, ...liftParents, plant];
+  const plantLeaves = plant.children.filter((m) => m.geometry && m.geometry.type === "ConeGeometry");
+  plantLeaves.forEach((l) => (l.userData.sway = 0));
+
+  let gesture = null;
+  let blindDrop = 0;
+  let panX = 0;
+  const slatBase = blinds.children.map((s) => s.position.y);
+  const deskPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hitPoint = new THREE.Vector3();
+
+  const applyBlind = () => {
+    blinds.children.forEach((s, i) => {
+      s.position.y = slatBase[i] - blindDrop * i * 0.17;
+      s.rotation.x = -0.9 + blindDrop * 0.75;
+    });
+  };
+
+  const onCanvasDown = (e) => {
+    if (!e.isPrimary) return;
+    const hit = castAt(e, interactives);
+    gesture = { x: e.clientX, y: e.clientY, moved: 0, kind: "scene" };
+    if (hit) {
+      let node = hit.object;
+      while (node && !interactives.includes(node)) node = node.parent;
+      if (node === blinds) gesture.kind = "blind";
+      else if (node === chair) gesture.kind = "chair";
+      else if (node === monitor) gesture.kind = "monitor";
+      else if (node === plant) gesture.kind = "plant";
+      else if (liftParents.includes(node)) {
+        const L = liftables.find((l) => l.obj === node);
+        gesture.kind = "lift";
+        gesture.L = L;
+        const local = desk.worldToLocal(hit.point.clone());
+        if (node === kb && Math.abs(local.x - kb.position.x) > 0.55) gesture.kind = "kbturn";
+      }
+      canvas.setPointerCapture?.(e.pointerId);
+    }
+  };
+
+  const onCanvasMove = (e) => {
+    if (!e.isPrimary) return;
+    if (!gesture) {
+      const h = castAt(e, plantLeaves);
+      if (h) h.object.userData.sway = 1;
+      return;
+    }
+    const dx = e.clientX - gesture.x;
+    const dy = e.clientY - gesture.y;
+    gesture.moved = Math.max(gesture.moved, Math.hypot(dx, dy));
+    if (gesture.kind === "blind") {
+      blindDrop = Math.min(1, Math.max(0, blindDrop + dy * 0.004));
+      applyBlind();
+    } else if (gesture.kind === "chair") {
+      chair.position.x = Math.min(3.2, Math.max(-3.2, chair.position.x + dx * 0.006));
+      chair.rotation.y += dx * 0.0012;
+    } else if (gesture.kind === "monitor") {
+      monitor.rotation.y = Math.min(0.8, Math.max(-0.8, monitor.rotation.y + dx * 0.004));
+      screenMesh.rotation.x = Math.min(0.35, Math.max(-0.35, screenMesh.rotation.x - dy * 0.002));
+    } else if (gesture.kind === "kbturn") {
+      gesture.L.obj.rotation.y += dx * 0.006;
+    } else if (gesture.kind === "lift") {
+      const r2 = canvas.getBoundingClientRect();
+      ndc.set(((e.clientX - r2.left) / r2.width) * 2 - 1, -((e.clientY - r2.top) / r2.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      deskPlane.constant = -(desk.localToWorld(new THREE.Vector3(0, gesture.L.base.y + 0.5, 0)).y);
+      if (ray.ray.intersectPlane(deskPlane, hitPoint)) {
+        const local = desk.worldToLocal(hitPoint.clone());
+        gesture.L.obj.position.x = Math.min(3.4, Math.max(-3.4, local.x));
+        gesture.L.obj.position.z = Math.min(1.1, Math.max(-1.1, local.z));
+        gesture.L.obj.position.y = gesture.L.base.y + 0.28;
+      }
+    } else if (gesture.kind === "plant") {
+      plantLeaves.forEach((l) => (l.userData.sway = Math.min(1, l.userData.sway + Math.hypot(dx, dy) * 0.02)));
+    } else {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (camera.aspect < 0.8) panX = Math.min(2.6, Math.max(-2.6, panX + dx * 0.008));
+        else if (onBrightness && Math.abs(dx) > 1) { onBrightness(dx * 0.12); gesture.x = e.clientX; }
+      }
+    }
+    if (gesture.kind !== "scene") { gesture.x = e.clientX; gesture.y = e.clientY; }
+  };
+
+  const onCanvasUp = (e) => {
+    if (!gesture) return;
+    if (gesture.kind === "lift") gesture.L.obj.position.y = gesture.L.base.y;
+    gesture = null;
+    canvas.releasePointerCapture?.(e.pointerId);
+  };
+
+  canvas.addEventListener("pointerdown", onCanvasDown);
+  canvas.addEventListener("pointermove", onCanvasMove);
+  canvas.addEventListener("pointerup", onCanvasUp);
+  canvas.addEventListener("pointercancel", onCanvasUp);
+  canvas.style.touchAction = "none";
+
   const resize = () => {
     const w = canvas.clientWidth || innerWidth;
     const h = canvas.clientHeight || innerHeight;
     renderer.setSize(w, h, false);
+    if (useFx) composer.setSize(w, h);
     camera.aspect = w / h;
     // pull the camera back on narrow screens so the room still reads
     camera.position.z = camera.aspect < 0.8 ? 12.5 : 9.4;
@@ -600,6 +796,8 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   let raf = 0;
   const clock = new THREE.Clock();
   let skySwap = null;
+  let flashT = 0;
+  let swayT = 0;
   const tick = () => {
     raf = requestAnimationFrame(tick);
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -621,12 +819,30 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
     mlLight.intensity = cur.lamp * brightness * 2.6;
     mlDome.material.emissiveIntensity = 0.15 + cur.lamp * 0.8;
 
+    // storm lightning: brief bright flashes while it rains
+    if (cur.rain > 0.4) {
+      flashT -= dt;
+      if (flashT <= -3 - (Math.sin(clock.elapsedTime * 13.7) * 0.5 + 0.5) * 5) flashT = 0.28 + Math.random() * 0.22;
+    } else flashT = Math.min(flashT, 0);
+    const flash = flashT > 0 ? Math.min(1, flashT / 0.2) : 0;
+
     sun.color.copy(cur.sun);
-    sun.intensity = cur.sunI * brightness;
+    sun.intensity = (cur.sunI * (1 - blindDrop * 0.8) + flash * 2.4) * brightness;
     if (tgt.sunPos) sun.position.set(...tgt.sunPos);
     hemi.color.copy(cur.hemiSky);
     hemi.groundColor.copy(cur.hemiGnd);
-    hemi.intensity = cur.hemiI * brightness;
+    hemi.intensity = (cur.hemiI * (1 - blindDrop * 0.45) + flash * 1.6) * brightness;
+
+    // plant sway decay
+    swayT += dt;
+    plantLeaves.forEach((l, i) => {
+      if (l.userData.sway > 0.01) {
+        const s = l.userData.sway;
+        l.rotation.z += Math.sin(swayT * 9 + i) * 0.02 * s;
+        l.rotation.x += Math.cos(swayT * 7 + i * 2) * 0.015 * s;
+        l.userData.sway *= 1 - 2.4 * dt;
+      }
+    });
     lampLight.intensity = cur.lamp * brightness * 2.2;
     shade.material.emissiveIntensity = 0.1 + cur.lamp * 0.6;
     screenGlow.intensity = cur.screen * brightness;
@@ -642,11 +858,12 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
       old && old.dispose();
     }
 
-    camera.position.x += (px * 0.55 - camera.position.x) * 0.04;
+    camera.position.x += (px * 0.55 + panX - camera.position.x) * 0.04;
     camera.position.y += (2.1 - py * 0.35 - camera.position.y) * 0.04;
-    camera.lookAt(camTarget);
+    camera.lookAt(camTarget.x + panX, camTarget.y, camTarget.z);
 
-    renderer.render(scene, camera);
+    if (useFx) composer.render();
+    else renderer.render(scene, camera);
   };
   tick();
   onReady && onReady();
@@ -660,6 +877,11 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
       clearInterval(cycle);
       removeEventListener("pointermove", onPointer);
       removeEventListener("resize", resize);
+      canvas.removeEventListener("pointerdown", onCanvasDown);
+      canvas.removeEventListener("pointermove", onCanvasMove);
+      canvas.removeEventListener("pointerup", onCanvasUp);
+      canvas.removeEventListener("pointercancel", onCanvasUp);
+      composer.dispose?.();
       renderer.dispose();
     },
   };
