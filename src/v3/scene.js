@@ -20,6 +20,10 @@ const MOODS = {
     sky: ["#0d1b2a", "#1b3a4b"], sun: "#9db8d6", sunI: 0.5, sunPos: [-5, 5.5, -8],
     hemi: ["#2a4560", "#181410", 0.7], lamp: 1.6, screen: 1.0, tint: "rgba(10, 20, 40, 0.12)",
   },
+  thunderstorm: {
+    sky: ["#33434f", "#57676f"], sun: "#90a8ba", sunI: 1.1, sunPos: [-5, 5, -8],
+    hemi: ["#5a6e7e", "#232a2e", 1.05], lamp: 1.0, screen: 0.9, tint: "rgba(30, 45, 60, 0.10)",
+  },
 };
 
 const WOOD = 0x96633a, WOOD_D = 0x7a4f2c, WALL = 0x2f4f47, WALL_D = 0x254038;
@@ -41,6 +45,27 @@ function cyl(rt, rb, h, color, opts = {}) {
   m.castShadow = opts.cast ?? true;
   m.receiveShadow = opts.recv ?? true;
   return m;
+}
+
+// Horizontal wood-grain texture for desk and console tops.
+function woodTexture() {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 128;
+  const g = c.getContext("2d");
+  g.fillStyle = "#96633a"; g.fillRect(0, 0, 512, 128);
+  for (let i = 0; i < 60; i++) {
+    g.strokeStyle = `rgba(60, 35, 15, ${0.04 + (i % 5) * 0.02})`;
+    g.lineWidth = 1 + (i % 3);
+    const y = (i * 37) % 128;
+    g.beginPath();
+    g.moveTo(0, y);
+    for (let x = 0; x <= 512; x += 32) g.lineTo(x, y + Math.sin((x + i * 53) * 0.02) * 3);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // Vertical gradient texture used for the sky outside the window.
@@ -168,12 +193,66 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   }
   winGroup.add(blinds);
 
+  // rain streaks on the glass, revealed in the thunderstorm mood
+  const rainCanvas = document.createElement("canvas");
+  rainCanvas.width = 256; rainCanvas.height = 256;
+  const rg2 = rainCanvas.getContext("2d");
+  for (let i = 0; i < 90; i++) {
+    const x = (i * 53) % 256, y = (i * 97) % 256, l = 14 + ((i * 31) % 26);
+    const lg = rg2.createLinearGradient(x, y, x + 2, y + l);
+    lg.addColorStop(0, "rgba(255,255,255,0)");
+    lg.addColorStop(0.35, `rgba(224,236,244,${0.16 + (i % 4) * 0.07})`);
+    lg.addColorStop(1, "rgba(255,255,255,0)");
+    rg2.strokeStyle = lg;
+    rg2.lineWidth = 1 + (i % 2) * 0.6;
+    rg2.beginPath(); rg2.moveTo(x, y); rg2.lineTo(x + 2, y + l); rg2.stroke();
+  }
+  const rainTex = new THREE.CanvasTexture(rainCanvas);
+  rainTex.wrapS = rainTex.wrapT = THREE.RepeatWrapping;
+  const rainMat = new THREE.MeshBasicMaterial({ map: rainTex, transparent: true, opacity: 0, depthWrite: false, fog: false });
+  const rainMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw, fh), rainMat);
+  rainMesh.position.z = 0.14;
+  winGroup.add(rainMesh);
+
+  // sun shafts falling from the blinds into the room
+  const shaftMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const shafts = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(0.55 + i * 0.2, 4.6), shaftMat);
+    sh.position.set(-1.1 + i * 1.1, -1.7, 1.6 + i * 0.3);
+    sh.rotation.set(1.05, 0.1 * (i - 1), 0.18);
+    shafts.add(sh);
+  }
+  winGroup.add(shafts);
+
+  // small plants on the window sill
+  const sill = box(fw + 0.5, 0.08, 0.4, 0x4a3120, { rough: 0.6 });
+  sill.position.set(0, -fh / 2 - 0.2, 0.16);
+  winGroup.add(sill);
+  const sillLeaf = new THREE.MeshStandardMaterial({ color: 0x3d6b4a, roughness: 0.8 });
+  [[-1.5, 0x9a5a3a], [-0.85, 0x6a4a3a]].forEach(([sx, potC]) => {
+    const p2 = cyl(0.14, 0.11, 0.22, potC, { seg: 14 });
+    p2.position.set(sx, -fh / 2 - 0.05, 0.16);
+    winGroup.add(p2);
+    for (let j = 0; j < 5; j++) {
+      const a = (j / 5) * Math.PI * 2;
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.4 + (j % 2) * 0.14, 6), sillLeaf);
+      leaf.position.set(sx + Math.cos(a) * 0.06, 0.28 - fh / 2, 0.16 + Math.sin(a) * 0.05);
+      leaf.rotation.set(Math.cos(a) * 0.4, 0, -Math.sin(a) * 0.4);
+      leaf.castShadow = true;
+      winGroup.add(leaf);
+    }
+  });
+
   // ---- desk --------------------------------------------------------------
   const desk = new THREE.Group();
   desk.position.set(0.6, 0, 0.4);
   room.add(desk);
 
   const deskTop = box(7.4, 0.16, 2.6, WOOD, { rough: 0.55 });
+  deskTop.material.map = woodTexture();
+  deskTop.material.map.repeat.set(2, 1);
+  deskTop.material.needsUpdate = true;
   deskTop.position.y = 1.42;
   desk.add(deskTop);
   [[-3.5, -1.1], [3.5, -1.1], [-3.5, 1.1], [3.5, 1.1]].forEach(([x, z]) => {
@@ -314,6 +393,54 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
   lampLight.shadow.mapSize.set(512, 512);
   lampGroup.add(lampLight);
 
+  // ---- side console with a glowing mushroom lamp --------------------------
+  const consoleT = new THREE.Group();
+  consoleT.position.set(5.9, 0, -4.6);
+  room.add(consoleT);
+  const cTop = box(2.6, 0.1, 0.9, WOOD, { rough: 0.55 });
+  cTop.material.map = woodTexture();
+  cTop.material.needsUpdate = true;
+  cTop.position.y = 0.95;
+  consoleT.add(cTop);
+  [[-1.15, -0.35], [1.15, -0.35], [-1.15, 0.35], [1.15, 0.35]].forEach(([x, z]) => {
+    const leg = box(0.09, 0.95, 0.09, WOOD_D);
+    leg.position.set(x, 0.475, z);
+    consoleT.add(leg);
+  });
+  // mushroom lamp
+  const ml = new THREE.Group();
+  ml.position.set(0.55, 1.0, 0);
+  consoleT.add(ml);
+  const mlStem = cyl(0.05, 0.09, 0.32, 0xe8e0d0, { rough: 0.5 });
+  mlStem.position.y = 0.16;
+  ml.add(mlStem);
+  const mlDome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.26, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.MeshStandardMaterial({ color: 0xf2e6d0, roughness: 0.55, emissive: 0xffc98a, emissiveIntensity: 0.4, side: THREE.DoubleSide })
+  );
+  mlDome.position.y = 0.34;
+  mlDome.castShadow = true;
+  ml.add(mlDome);
+  const mlLight = new THREE.PointLight(0xffc98a, 0, 6, 1.8);
+  mlLight.position.set(0.55, 1.45, 0.15);
+  consoleT.add(mlLight);
+  // book stack and a vase with branches
+  [0x8a4a3a, 0x3a5a7a, 0xb08a4a].forEach((c, i) => {
+    const b = box(0.42, 0.05, 0.3, c, { rough: 0.75 });
+    b.position.set(-0.75, 1.03 + i * 0.052, 0.05);
+    b.rotation.y = (i - 1) * 0.14;
+    consoleT.add(b);
+  });
+  const vase = cyl(0.09, 0.12, 0.3, 0x5a4a3a, { rough: 0.6 });
+  vase.position.set(-0.2, 1.15, -0.15);
+  consoleT.add(vase);
+  for (let i = 0; i < 3; i++) {
+    const br = cyl(0.008, 0.008, 0.55, 0x4a3b2c, { seg: 6 });
+    br.position.set(-0.2 + (i - 1) * 0.04, 1.5, -0.15);
+    br.rotation.z = (i - 1) * 0.22;
+    consoleT.add(br);
+  }
+
   // ---- chair -------------------------------------------------------------
   const chair = new THREE.Group();
   chair.position.set(1.1, 0, 2.3);
@@ -420,6 +547,7 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
     hemiI: MOODS.morning.hemi[2],
     lamp: MOODS.morning.lamp,
     screen: MOODS.morning.screen,
+    rain: 0,
   };
   const tgt = { ...cur };
   let brightness = 0.82;
@@ -439,6 +567,7 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
     tgt.hemiI = m.hemi[2];
     tgt.lamp = m.lamp;
     tgt.screen = m.screen;
+    tgt.rain = name === "thunderstorm" ? 1 : 0;
   };
   const setBrightness = (v) => { brightness = Math.min(1, Math.max(0.15, v)); };
 
@@ -485,6 +614,12 @@ export function mountStudio(canvas, { images = [], onReady } = {}) {
     cur.hemiI += (tgt.hemiI - cur.hemiI) * k;
     cur.lamp += (tgt.lamp - cur.lamp) * k;
     cur.screen += (tgt.screen - cur.screen) * k;
+    cur.rain += (tgt.rain - cur.rain) * k;
+    rainMat.opacity = cur.rain * 0.85;
+    if (cur.rain > 0.01) { rainTex.offset.y -= dt * 0.45; rainTex.offset.x -= dt * 0.004; }
+    shaftMat.opacity = Math.max(0, (cur.sunI - 0.6) / 4) * 0.11 * brightness * (1 - cur.rain);
+    mlLight.intensity = cur.lamp * brightness * 2.6;
+    mlDome.material.emissiveIntensity = 0.15 + cur.lamp * 0.8;
 
     sun.color.copy(cur.sun);
     sun.intensity = cur.sunI * brightness;

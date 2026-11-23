@@ -1,6 +1,6 @@
 /* v3 "studio glass" — frosted glass panel over the studio scene.
-   Visual language (dark translucent tiles, bento grid, pill brightness
-   control) follows the reference's mood; all CSS here is original. */
+   Visual language (image-filled tiles, bento grid, vertical brightness
+   pill, draggable panel) follows the reference's mood; all CSS is original. */
 
 @font-face {
   font-family: "Geist";
@@ -29,6 +29,8 @@
   width: 100%;
   height: 100%;
   display: block;
+  cursor: ew-resize;
+  touch-action: pan-y;
 }
 
 .v3-tint {
@@ -41,6 +43,12 @@
 .m-sunset .v3-tint { background: #1c0d06; }
 .m-night .v3-tint { background: #04070f; }
 .m-afternoon .v3-tint { background: #0a0f0c; }
+.m-thunderstorm .v3-tint { background: #0a1218; }
+
+/* bare mode: scene only (used to render the preset thumbnails) */
+.v3[data-bare] .v3-coords,
+.v3[data-bare] .v3-versions,
+.v3[data-bare] .v3-credit { display: none; }
 
 /* ---- floating panel ---------------------------------------------------- */
 
@@ -56,17 +64,25 @@
   pointer-events: auto;
   position: absolute;
   left: 50%;
-  top: max(env(safe-area-inset-top), clamp(12px, 2.2vh, 24px));
+  top: max(env(safe-area-inset-top), clamp(10px, 1.8vh, 20px));
   translate: -50% 0;
   transform: translate(var(--panel-x), var(--panel-y));
-  width: min(620px, calc(100% - 32px));
+  width: min(700px, calc(100% - 28px));
 }
+
+.v3-scroll {
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.v3-scroll::-webkit-scrollbar { display: none; }
 
 .v3-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 4px clamp(10px, 1.6vh, 16px);
+  margin: 0 4px clamp(8px, 1.4vh, 14px);
 }
 
 .v3-heading h1 {
@@ -106,6 +122,7 @@
   opacity: 0.45;
   background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 4px 4.5px;
 }
+.v3-handle:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .v3-panel[data-moving] .v3-handle { cursor: grabbing; }
 .v3-panel[data-moving] .v3-handle::after { opacity: 0.85; }
 
@@ -124,31 +141,69 @@
   place-items: center;
 }
 .v3-toggle span {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   border: 2px solid #fbfaf5cc;
-  border-top-color: transparent;
-  transition: transform 0.25s ease;
+  position: relative;
 }
-.v3-toggle[aria-expanded="false"] span { transform: rotate(180deg); }
+.v3-toggle span::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #fbfaf5cc;
+}
+.v3-toggle:hover { background: rgb(20 30 32 / 62%); }
 
-/* ---- bento grid --------------------------------------------------------- */
+/* ---- bento grids -------------------------------------------------------- */
 
 .v3-grid {
-  --gap: clamp(8px, 1.4vw, 12px);
+  --gap: clamp(8px, 1.2vw, 12px);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  /* explicit rows: template areas alone auto-size rows to content and the
-     tiles end up overlapping each other */
-  grid-template-rows: repeat(3, clamp(102px, 14.5vh, 128px));
-  grid-auto-rows: clamp(102px, 14.5vh, 128px);
   gap: var(--gap);
-  grid-template-areas:
-    "profile profile ramprush orbit"
-    "profile profile hud bright"
-    "more    more    calorie bright";
+  grid-auto-rows: clamp(84px, 11.5vh, 104px);
 }
+
+.grid-portfolio {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-areas:
+    "profile profile ramprush orbit hud"
+    "profile profile calorie more more";
+}
+
+.grid-lighting {
+  grid-template-columns: 1.35fr 1fr 1fr 1fr 0.55fr;
+  grid-template-areas:
+    "hero storm storm afternoon bright"
+    "hero sunset sunset night bright";
+}
+
+.v3-group-label {
+  margin: clamp(10px, 1.6vh, 16px) 6px clamp(6px, 1vh, 10px);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #fbfaf57a;
+  text-shadow: 0 1px 6px #08121288;
+}
+
+.tile-profile { grid-area: profile; }
+.tile-ramprush { grid-area: ramprush; }
+.tile-orbit { grid-area: orbit; }
+.tile-windshield-hud { grid-area: hud; }
+.tile-calorie-tracker-ai { grid-area: calorie; }
+.tile-more { grid-area: more; }
+
+.mood-morning { grid-area: hero; }
+.mood-thunderstorm { grid-area: storm; }
+.mood-afternoon { grid-area: afternoon; }
+.mood-sunset { grid-area: sunset; }
+.mood-night { grid-area: night; }
+.tile-bright { grid-area: bright; }
+
+/* ---- tiles -------------------------------------------------------------- */
 
 .tile {
   appearance: none;
@@ -156,9 +211,9 @@
   display: block;
   /* no width/height:100% - grid stretch sizes the tile to its area;
      an explicit 100% makes the tile outgrow the area and overlap neighbours */
-  padding: clamp(12px, 1.8vw, 18px);
+  padding: clamp(11px, 1.5vw, 16px);
   border: 0;
-  border-radius: clamp(18px, 2.6vw, 26px);
+  border-radius: clamp(18px, 2.4vw, 24px);
   color: #fbfaf5;
   font: inherit;
   text-align: left;
@@ -171,164 +226,151 @@
   backdrop-filter: blur(14px) saturate(1.3);
   box-shadow: inset 0 0 15px #ffffff13, inset 0 1px 0 #ffffff22, 0 5px 16px -5px #04090759;
   transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-  overflow: hidden; /* keep tile text from spilling onto neighbouring tiles */
+  overflow: hidden; /* keep tile content from spilling onto neighbours */
 }
-.tile:hover {
+button.tile:hover {
   background: rgb(14 22 24 / 58%);
   transform: translateY(-2px);
   box-shadow: inset 0 0 18px #ffffff1a, inset 0 1px 0 #ffffff2e, 0 10px 22px -8px #04090780;
 }
-.tile:active {
+button.tile:active {
   background: rgb(6 13 16 / 70%);
   transform: translateY(0);
   box-shadow: inset 0 5px 12px #02080bc9, inset 0 -2px 3px #cadad75e, 0 1px 3px #0002;
 }
-.tile:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+button.tile:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 
-.tile-icon {
+/* image instrument filling the tile, darkened toward the copy */
+.tile-img .instrument {
   position: absolute;
-  top: clamp(12px, 1.8vw, 18px);
-  left: clamp(12px, 1.8vw, 18px);
-  width: 26px;
-  height: 26px;
-  opacity: 0.9;
+  inset: 0;
 }
-.tile-icon svg { width: 100%; height: 100%; display: block; }
+.tile-img .instrument img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0.85;
+}
+.tile-img .instrument::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(6 12 14 / 34%) 0%, rgb(6 12 14 / 12%) 38%, rgb(6 12 14 / 72%) 100%);
+}
 
 .tile-corner {
   position: absolute;
-  top: clamp(12px, 1.8vw, 18px);
-  right: clamp(12px, 1.8vw, 18px);
+  top: clamp(11px, 1.5vw, 16px);
+  right: clamp(11px, 1.5vw, 16px);
   font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 12px;
-  color: #fbfaf599;
+  font-size: 11.5px;
+  color: #fbfaf5b3;
+  text-shadow: 0 1px 5px #08121288;
 }
 
-.tile-text {
+.copy {
   position: absolute;
-  left: clamp(12px, 1.8vw, 18px);
-  right: clamp(12px, 1.8vw, 18px);
-  bottom: clamp(10px, 1.6vw, 16px);
+  left: clamp(11px, 1.5vw, 16px);
+  right: clamp(11px, 1.5vw, 16px);
+  bottom: clamp(9px, 1.3vw, 14px);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.tile-name {
-  font-size: clamp(14px, 1.6vw, 16px);
+.copy .name {
+  font-size: clamp(14px, 1.5vw, 17px);
   letter-spacing: -0.03em;
   line-height: 1.15;
-  text-shadow: 0 1px 5px #08121277;
+  text-shadow: 0 1px 5px #081212aa;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.tile-detail {
-  font-size: clamp(11px, 1.2vw, 12.5px);
-  color: #fbfaf5a6;
+.slot-hero .copy .name, .tile-profile .copy .name { font-size: clamp(17px, 2vw, 22px); }
+.copy .detail {
+  font-size: clamp(11px, 1.1vw, 12.5px);
+  color: #fbfaf5b3;
   line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 1; /* one line: a 2-line name plus 2-line tagline collides with the tile icon */
-  -webkit-box-orient: vertical;
+  text-shadow: 0 1px 5px #08121288;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* profile tile: vertical flow so nothing overlaps */
-.tile-profile {
-  grid-area: profile;
-  cursor: default;
+.level {
+  position: absolute;
+  top: clamp(11px, 1.5vw, 16px);
+  right: clamp(11px, 1.5vw, 16px);
   display: flex;
-  flex-direction: column;
-  gap: 7px;
+  align-items: baseline;
+  gap: 1px;
+  color: #fbfaf5e0;
+  text-shadow: 0 1px 5px #08121288;
 }
-.tile-profile .tile-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.tile-profile .tile-top .moods {
-  flex: 1;
-  min-width: 0;
-}
-.tile-profile .tile-top .tile-corner {
-  margin-left: auto;
-}
-.tile-avatar {
-  width: clamp(34px, 4.2vw, 42px);
-  height: clamp(34px, 4.2vw, 42px);
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 2px 10px #0006, inset 0 0 0 2px #ffffff2a;
-}
-.tile-profile .tile-corner { position: static; }
-.tile-profile .tile-text {
-  position: static;
-  margin-top: auto;
-  gap: 3px;
-}
-.tile-profile .tile-name {
-  font-size: clamp(16px, 1.9vw, 20px);
-  -webkit-line-clamp: 2;
-}
-.tile-profile .tile-detail { -webkit-line-clamp: 1; }
+.level .number { font-size: clamp(17px, 2vw, 24px); letter-spacing: -0.04em; }
+.level .unit { font-size: 12px; color: #fbfaf599; }
 
-.moods {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.mood {
-  appearance: none;
-  border: 1px solid #ffffff1f;
-  background: #ffffff08;
-  color: #fbfaf5bf;
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.01em;
-  padding: 4px 9px 4px 6px;
-  border-radius: 999px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.mood span {
+/* active preset indicator */
+.indicator {
+  position: absolute;
+  right: clamp(11px, 1.5vw, 16px);
+  bottom: clamp(10px, 1.3vw, 14px);
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #ffd9a8;
-  box-shadow: 0 0 6px #ffd9a8aa;
+  background: #fff;
+  box-shadow: 0 0 8px #ffffffcc, 0 0 2px #fff;
 }
-.mood-afternoon span { background: #fff3e0; box-shadow: 0 0 6px #fff3e0aa; }
-.mood-sunset span { background: #ff9c5a; box-shadow: 0 0 6px #ff9c5aaa; }
-.mood-night span { background: #9db8d6; box-shadow: 0 0 6px #9db8d6aa; }
-.mood:hover { background: #ffffff14; color: #fbfaf5; }
-.mood[aria-pressed="true"] {
-  background: #ffffff1f;
-  border-color: #ffffff47;
-  color: #fff;
+.preset[aria-pressed="true"] {
+  box-shadow: inset 0 0 18px #ffffff26, inset 0 1px 0 #ffffff38, 0 8px 20px -8px #04090780;
 }
 
-/* project tiles */
-.tile-ramprush { grid-area: ramprush; }
-.tile-orbit { grid-area: orbit; }
-.tile-windshield-hud { grid-area: hud; }
-.tile-calorie-tracker-ai { grid-area: calorie; }
-.tile-more { grid-area: more; }
+/* profile tile: avatar instrument + name */
+.tile-profile { cursor: default; }
+.tile-profile .instrument {
+  position: absolute;
+  top: clamp(11px, 1.5vw, 16px);
+  left: clamp(11px, 1.5vw, 16px);
+}
+.tile-profile .instrument img {
+  width: clamp(40px, 4.5vw, 52px);
+  height: clamp(40px, 4.5vw, 52px);
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 2px 10px #0006, inset 0 0 0 2px #ffffff2a;
+}
+.tile-profile .tile-corner { position: absolute; }
 
-/* brightness pill */
+/* everything-else tile: centered icon */
+.tile-more .more-icon {
+  position: absolute;
+  top: clamp(11px, 1.5vw, 16px);
+  left: clamp(11px, 1.5vw, 16px);
+  width: 24px;
+  height: 24px;
+  opacity: 0.9;
+}
+.tile-more .more-icon svg { width: 100%; height: 100%; display: block; }
+
+/* brightness pill — light, like the reference */
 .tile-bright {
-  grid-area: bright;
-  border-radius: clamp(28px, 4vw, 40px);
   cursor: default;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 8px 14px;
+  padding: 14px 8px 12px;
+  border-radius: clamp(24px, 3.4vw, 34px);
+  background: rgb(240 236 228 / 88%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: inset 0 0 15px #ffffff30, inset 0 1px 0 #ffffff50, 0 5px 16px -5px #04090759;
+  color: #2a2c2a;
 }
-.tile-sun { width: 20px; height: 20px; opacity: 0.85; flex: none; }
+.tile-sun { width: 20px; height: 20px; opacity: 0.75; flex: none; }
 .tile-bright input {
   appearance: none;
   -webkit-appearance: none;
@@ -351,27 +393,27 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #fbfaf5;
-  box-shadow: 0 2px 8px #0008, inset 0 0 0 4px #fbfaf522;
+  background: #fff;
+  box-shadow: 0 2px 8px #0005, inset 0 0 0 4px #ffffff33;
 }
 .tile-bright input::-moz-range-track { width: 100%; background: transparent; }
 .tile-bright input::-moz-range-thumb {
   width: 26px; height: 26px; border: 0; border-radius: 50%;
-  background: #fbfaf5; box-shadow: 0 2px 8px #0008;
+  background: #fff; box-shadow: 0 2px 8px #0005;
 }
 .bright-label {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 10.5px;
-  color: #fbfaf599;
-  writing-mode: initial;
+  color: #2a2c2a99;
 }
 
 .v3-hint {
-  margin: 10px 6px 0;
+  margin: 8px 6px 0;
   text-align: center;
   font-size: 12px;
   color: #fbfaf580;
   text-shadow: 0 1px 6px #08121288;
+  transition: opacity 0.4s ease;
 }
 
 /* ---- corners ------------------------------------------------------------ */
@@ -488,19 +530,22 @@
 /* ---- small screens ------------------------------------------------------- */
 
 @media (max-width: 640px) {
-  .v3-grid {
+  .grid-portfolio {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(5, clamp(76px, 11.5vh, 104px));
-    grid-auto-rows: clamp(76px, 11.5vh, 104px);
     grid-template-areas:
-      "profile profile"
       "profile profile"
       "ramprush orbit"
       "hud calorie"
-      "more bright";
+      "more more";
   }
-  .tile-profile .tile-detail { display: none; }
-  .tile-icon { width: 20px; height: 20px; }
+  .grid-lighting {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "hero hero"
+      "storm afternoon"
+      "sunset night"
+      "bright bright";
+  }
   .tile-bright {
     flex-direction: row;
     padding: 10px 16px;
@@ -513,11 +558,11 @@
   }
   .tile-bright input::-webkit-slider-runnable-track { height: 100%; }
   .tile-bright input::-moz-range-track { height: 100%; }
-  .bright-label { writing-mode: initial; }
   .drawer-cols { grid-template-columns: 1fr; }
   .v3-credit { display: none; }
+  .v3-hint { margin-bottom: 58px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tile, .mood, .v3-versions a { transition: none; }
+  .tile, .v3-versions a, .v3-hint { transition: none; }
 }
