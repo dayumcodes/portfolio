@@ -148,6 +148,9 @@ export const PROJECTS = [
   P("portfolio-v1", "Portfolio v1", "the old 3d portfolio", "/v2/cards/v1.jpg", {
     internal: "/v1",
   }),
+  P("portfolio-v3", "Portfolio v3", "studio glass edition", "/v2/cards/v3.jpg", {
+    internal: "/v3",
+  }),
 ];
 
 export const SIGNATURE_PATH =
