@@ -1,386 +1,304 @@
-import { useEffect, useRef, useState } from "react";
-import { mountStudio } from "./scene.js";
-import { PROFILE, JOBS, PROJECTS } from "../v2/data.js";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PROFILE, PROJECTS } from "../v2/data.js";
 
-// v3 "studio glass": a floating frosted-glass control panel over a code-built
-// studio scene. Layout and interactions follow threeui.com/studio-glass as a
-// reference; everything here is implemented independently with Fuzail's real
-// content, and all imagery is his own or generated from his own scene.
-
-const MOOD_LIST = [
-  { id: "morning", label: "Morning", detail: "Soft sun through the window", level: 78, slot: "hero" },
-  { id: "thunderstorm", label: "Thunderstorm", detail: "Rain on glass", level: 36, slot: "wide" },
-  { id: "afternoon", label: "Afternoon", detail: "High sun, clear daylight", level: 100, slot: "compact" },
-  { id: "sunset", label: "Sunset", detail: "Low amber light", level: 64, slot: "wide" },
-  { id: "night", label: "Night", detail: "Lamp and monitor glow", level: 22, slot: "compact" },
+const MOODS = [
+  { id: "morning", label: "Morning", detail: "Soft sun through the window", level: 78, icon: "✒️", slot: "hero" },
+  { id: "thunderstorm", label: "Thunderstorm", detail: "Rain on glass", level: 36, icon: "⌁", slot: "wide" },
+  { id: "afternoon", label: "Afternoon", detail: "High sun, clear daylight", level: 100, icon: "☼", slot: "small" },
+  { id: "sunset", label: "Sunset", detail: "Low amber light", level: 64, icon: "⌛", slot: "wide" },
+  { id: "night", label: "Night", detail: "Lamp and monitor glow", level: 22, icon: "◖", slot: "small" },
 ];
-
-const HINTS = [
-  "Drag my name to move this panel",
-  "Drag left or right on the room to dim or brighten it",
-  "Pick a studio preset to change the workspace lighting",
-];
-
-const TILE_SLUGS = ["ramprush", "orbit", "windshield-hud", "calorie-tracker-ai"];
-const TILE_IMGS = {
+const FEATURED = ["ramprush", "orbit", "windshield-hud", "calorie-tracker-ai"];
+const PROFILE_IMAGE = "/v2/avatar.png";
+const PROJECT_IMAGES = {
   ramprush: "/v2/cards/ramprush.jpg",
   orbit: "/v2/cards/orbit.jpg",
   "windshield-hud": "/v2/cards/hud.jpg",
   "calorie-tracker-ai": "/v2/cards/calorie-ai.jpg",
 };
 
-function Level({ value, unit }) {
-  return (
-    <span className="level">
-      <span className="number">{value}</span>
-      <span className="unit">{unit}</span>
-    </span>
-  );
+function setTilt(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  event.currentTarget.style.setProperty("--card-rx", `${(0.5 - y) * 5}deg`);
+  event.currentTarget.style.setProperty("--card-ry", `${(x - 0.5) * 6}deg`);
+}
+function clearTilt(event) {
+  event.currentTarget.style.setProperty("--card-rx", "0deg");
+  event.currentTarget.style.setProperty("--card-ry", "0deg");
 }
 
 export default function V3App() {
-  const canvasRef = useRef(null);
-  const studioRef = useRef(null);
+  const frameRef = useRef(null);
   const panelRef = useRef(null);
   const dragRef = useRef(null);
+  const brightnessDragRef = useRef(null);
   const movedRef = useRef(false);
+  const tiltTimerRef = useRef(null);
   const [mood, setMood] = useState("morning");
-  const [bright, setBright] = useState(78);
-  const [drawer, setDrawer] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [tilt, setTilt] = useState(0);
-  const [hintIdx, setHintIdx] = useState(0);
-  const [bare] = useState(() => new URLSearchParams(location.search).get("bare") === "1");
+  const [brightness, setBrightness] = useState(78);
+  const [workOpen, setWorkOpen] = useState(false);
+  const [cardsHidden, setCardsHidden] = useState(false);
+  const projects = useMemo(
+    () => FEATURED.map((slug) => PROJECTS.find((project) => project.slug === slug)).filter(Boolean),
+    [],
+  );
 
   useEffect(() => {
-    document.title = "Mohammed Fuzail — studio glass";
-    const q = new URLSearchParams(location.search);
-    const studio = mountStudio(canvasRef.current, {
-      images: ["/v2/cards/ramprush.jpg", "/v2/cards/calorie-ai.jpg", "/v2/cards/hud.jpg", "/v2/cards/orbit.jpg"],
-      lowfx: q.get("lowfx") === "1",
-      onBrightness: (d) =>
-        setBright((b) => {
-          const n = Math.min(100, Math.max(15, Math.round(b + d)));
-          studio.setBrightness(n / 100);
-          return n;
-        }),
-    });
-    studioRef.current = studio;
-    const m = MOOD_LIST.find((x) => x.id === q.get("mood"));
-    if (m) { setMood(m.id); studio.setMood(m.id); setBright(m.level); studio.setBrightness(m.level / 100); }
-    if (q.get("bright")) handleBright(Number(q.get("bright")));
-    const t = setInterval(() => setHintIdx((i) => (i + 1) % HINTS.length), 7000);
-    return () => { clearInterval(t); studio.dispose(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    document.title = `${PROFILE.name} — portfolio`;
+    const onKeyDown = (event) => { if (event.key === "Escape") setWorkOpen(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const handleMood = (id) => {
-    const m = MOOD_LIST.find((x) => x.id === id);
-    if (!m) return;
-    setMood(id);
-    studioRef.current?.setMood(id);
-    setBright(m.level);
-    studioRef.current?.setBrightness(m.level / 100);
+  // Drive the original Studio Glass lighting controls inside the same-origin scene.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+    let attempts = 0;
+    let timer;
+    const applyLighting = () => {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc) return false;
+        const target = MOODS.find((item) => item.id === mood);
+        const button = [...doc.querySelectorAll("#studio-controls button[aria-label]")]
+          .find((item) => item.getAttribute("aria-label").startsWith(`${target.label},`));
+        if (!button) return false;
+        button.click();
+        const slider = doc.querySelector('#studio-controls input[type="range"]');
+        if (slider) {
+          const setter = Object.getOwnPropertyDescriptor(frame.contentWindow.HTMLInputElement.prototype, "value")?.set;
+          setter?.call(slider, String(brightness));
+          slider.dispatchEvent(new frame.contentWindow.Event("input", { bubbles: true }));
+          slider.dispatchEvent(new frame.contentWindow.Event("change", { bubbles: true }));
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const retry = () => {
+      if (applyLighting() || attempts++ > 20) clearInterval(timer);
+    };
+    frame.addEventListener("load", retry);
+    timer = window.setInterval(retry, 250);
+    retry();
+    return () => { clearInterval(timer); frame.removeEventListener("load", retry); };
+  }, [mood, brightness]);
+
+  const chooseMood = (item) => {
+    setMood(item.id);
+    setBrightness(item.level);
   };
-  const handleBright = (v) => {
-    const n = Math.min(100, Math.max(15, Math.round(v)));
-    setBright(n);
-    studioRef.current?.setBrightness(n / 100);
+  const setBrightnessFromPointer = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const progress = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+    setBrightness(Math.round(100 - progress * 85));
+  };
+  const startBrightnessDrag = (event) => {
+    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    brightnessDragRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setBrightnessFromPointer(event);
+  };
+  const moveBrightnessDrag = (event) => {
+    if (brightnessDragRef.current !== event.pointerId) return;
+    event.preventDefault();
+    setBrightnessFromPointer(event);
+  };
+  const endBrightnessDrag = (event) => {
+    if (brightnessDragRef.current === event.pointerId) brightnessDragRef.current = null;
+  };
+  const openProject = (project) => {
+    if (project.internal) window.location.assign(project.internal);
+    else if (project.href) window.open(project.href, "_blank", "noopener,noreferrer");
   };
 
-  // ---- panel drag: pointer on the title, arrows when focused, Home resets --
-  const setPanelPos = (x, y) => {
+  const setPanelOffset = (x, y) => {
     const panel = panelRef.current;
     if (!panel) return;
     panel.style.setProperty("--panel-x", `${x}px`);
     panel.style.setProperty("--panel-y", `${y}px`);
   };
-  const getPanelPos = () => {
+  const onHandleDown = (event) => {
+    if (event.button !== 0 || !panelRef.current) return;
     const panel = panelRef.current;
-    if (!panel) return { x: 0, y: 0 };
-    return {
-      x: parseFloat(panel.style.getPropertyValue("--panel-x")) || 0,
-      y: parseFloat(panel.style.getPropertyValue("--panel-y")) || 0,
-    };
-  };
-  const onHandleDown = (e) => {
-    const p = getPanelPos();
-    dragRef.current = { x: e.clientX, y: e.clientY, px: p.x, py: p.y, lastT: performance.now(), vx: 0 };
+    const x = Number.parseFloat(getComputedStyle(panel).getPropertyValue("--panel-x")) || 0;
+    const y = Number.parseFloat(getComputedStyle(panel).getPropertyValue("--panel-y")) || 0;
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x, y, lastX: event.clientX, lastTime: performance.now(), velocity: 0 };
     movedRef.current = false;
-    setTilt(0);
-    panelRef.current?.setAttribute("data-moving", "");
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    panel.dataset.moving = "true";
+    event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const onHandleMove = (e) => {
-    const d = dragRef.current;
-    if (!d) return;
+  const onHandleMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const panel = panelRef.current;
+    const rect = panel.getBoundingClientRect();
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    movedRef.current ||= Math.abs(dx) + Math.abs(dy) > 4;
+    const minX = 24 - (rect.left - dx);
+    const maxX = window.innerWidth - 24 - (rect.right - dx);
+    const minY = 10 - (rect.top - dy);
+    const maxY = window.innerHeight - 10 - (rect.bottom - dy);
+    const x = Math.min(maxX, Math.max(minX, drag.x + dx));
+    const y = Math.min(maxY, Math.max(minY, drag.y + dy));
     const now = performance.now();
-    const dt = Math.max(1, now - d.lastT);
-    d.vx = ((e.clientX - d.x) - (d.lastDx || 0)) / dt; // px per ms
-    d.lastDx = e.clientX - d.x;
-    d.lastT = now;
-    if (Math.abs(e.clientX - d.x) > 6 || Math.abs(e.clientY - d.y) > 6) movedRef.current = true;
-    setPanelPos(
-      Math.min(innerWidth * 0.4, Math.max(-innerWidth * 0.4, d.px + e.clientX - d.x)),
-      Math.min(innerHeight * 0.5, Math.max(-40, d.py + e.clientY - d.y))
-    );
+    const elapsed = Math.max(1, now - drag.lastTime);
+    drag.velocity = (event.clientX - drag.lastX) / elapsed;
+    drag.lastX = event.clientX;
+    drag.lastTime = now;
+    setPanelOffset(x, y);
   };
-  const onHandleUp = () => {
-    const d = dragRef.current;
+  const onHandleUp = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    panelRef.current?.removeAttribute("data-moving");
-    // fling: brief inertia tilt in the throw direction, like the reference
-    if (d && Math.abs(d.vx) > 0.35) {
-      setTilt(Math.min(12, Math.max(-12, d.vx * 14)));
-      setTimeout(() => setTilt(0), 650);
+    const panel = panelRef.current;
+    if (panel) {
+      delete panel.dataset.moving;
+      if (movedRef.current) {
+        panel.style.setProperty("--panel-tilt", `${Math.max(-1.4, Math.min(1.4, drag.velocity * 24))}deg`);
+        clearTimeout(tiltTimerRef.current);
+        tiltTimerRef.current = window.setTimeout(() => panel.style.setProperty("--panel-tilt", "0deg"), 450);
+      } else {
+        setPanelOffset(0, 0);
+      }
     }
   };
-  const onHandleKey = (e) => {
-    const step = e.shiftKey ? 24 : 8;
-    const { x, y } = getPanelPos();
-    if (e.key === "Home") { setPanelPos(0, 0); e.preventDefault(); return; }
-    const moves = { ArrowLeft: [x - step, y], ArrowRight: [x + step, y], ArrowUp: [x, y - step], ArrowDown: [x, y + step] };
-    if (moves[e.key]) { setPanelPos(...moves[e.key]); e.preventDefault(); }
+  const onHandleKeyDown = (event) => {
+    const step = event.shiftKey ? 32 : 12;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const x = Number.parseFloat(getComputedStyle(panel).getPropertyValue("--panel-x")) || 0;
+    const y = Number.parseFloat(getComputedStyle(panel).getPropertyValue("--panel-y")) || 0;
+    const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (event.key === "Home") { setPanelOffset(0, 0); event.preventDefault(); return; }
+    if (moves[event.key]) {
+      setPanelOffset(x + moves[event.key][0], y + moves[event.key][1]);
+      event.preventDefault();
+    }
   };
-
-  // ---- global keys + gestures (reference: arrows step presets/brightness,
-  //      Escape or a downward swipe closes the drawer)
-  useEffect(() => {
-    const onKey = (e) => {
-      if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "")) return;
-      if (e.target?.closest?.(".v3-handle")) return; // handle has its own keys
-      if (e.key === "Escape") {
-        if (drawer) setDrawer(false);
-        else if (collapsed) setCollapsed(false);
-        return;
-      }
-      const i = MOOD_LIST.findIndex((m) => m.id === mood);
-      if (e.key === "ArrowRight") handleMood(MOOD_LIST[(i + 1) % MOOD_LIST.length].id);
-      else if (e.key === "ArrowLeft") handleMood(MOOD_LIST[(i + MOOD_LIST.length - 1) % MOOD_LIST.length].id);
-      else if (e.key === "ArrowUp") handleBright(bright + 6);
-      else if (e.key === "ArrowDown") handleBright(bright - 6);
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [mood, bright, drawer, collapsed]);
-
-  useEffect(() => {
-    let start = null;
-    const down = (e) => {
-      const t = e.touches[0];
-      start = { x: t.clientX, y: t.clientY, drawer: !!e.target.closest?.(".v3-drawer"), hint: !!e.target.closest?.(".v3-hint") };
-    };
-    const up = (e) => {
-      if (!start) return;
-      const t = e.changedTouches[0];
-      const dy = t.clientY - start.y;
-      if (dy > 60 && Math.abs(t.clientX - start.x) < 60) {
-        if (start.drawer) setDrawer(false);
-        else if (start.hint) setCollapsed(false);
-      }
-      start = null;
-    };
-    addEventListener("touchstart", down, { passive: true });
-    addEventListener("touchend", up, { passive: true });
-    return () => {
-      removeEventListener("touchstart", down);
-      removeEventListener("touchend", up);
-    };
-  }, []);
-
-  const openProject = (p) => {
-    if (p.internal) location.href = p.internal;
-    else if (p.href) window.open(p.href, "_blank", "noopener");
-    else setDrawer(true);
-  };
-
-  const tiles = TILE_SLUGS.map((s) => PROJECTS.find((p) => p.slug === s)).filter(Boolean);
 
   return (
-    <div
-      className={`v3 m-${mood}`}
-      data-bare={bare ? "" : undefined}
-    >
-      <canvas ref={canvasRef} className="v3-canvas" aria-hidden="true" />
-      <div className="v3-tint" aria-hidden="true" style={{ opacity: (1 - bright / 100) * 0.8 }} />
-      <div className="v3-vignette" aria-hidden="true" />
+    <main className="portfolio-glass">
+      <iframe
+        ref={frameRef}
+        className="portfolio-scene"
+        src="/studio-glass.html?view=room"
+        title="Interactive studio room"
+        allow="fullscreen"
+      />
+      <div className="scene-shade" aria-hidden="true" />
+      <div className={`rain-overlay${mood === "thunderstorm" ? " is-active" : ""}`} aria-hidden="true" />
 
-      <div className="v3-coords">
-        <section
-          className="v3-panel"
-          ref={panelRef}
-          data-collapsed={collapsed ? "" : undefined}
-          style={{ "--panel-tilt": `${tilt}deg` }}
-          aria-label="Portfolio and studio lighting controls"
-        >
-          <header className="v3-heading">
-            <h1>
-              <button
-                type="button"
-                className="v3-handle"
-                title="Drag to move the panel (arrow keys move it, Home re-centres)"
-                onPointerDown={onHandleDown}
-                onPointerMove={onHandleMove}
-                onPointerUp={onHandleUp}
-                onPointerCancel={onHandleUp}
-                onKeyDown={onHandleKey}
-                onClick={() => {
-                  if (!movedRef.current) { setPanelPos(0, 0); setTilt(0); }
-                }}
-              >
-                {PROFILE.name}
-              </button>
-            </h1>
+      <section ref={panelRef} className="portfolio-panel" aria-label="Mohammed Fuzail portfolio">
+        <header className="portfolio-heading">
+          <h1><button className="panel-handle" type="button" aria-label="Drag portfolio panel. Use arrow keys to move; Home to reset." onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp} onKeyDown={onHandleKeyDown} onClick={(event) => { if (movedRef.current) event.preventDefault(); else setPanelOffset(0, 0); movedRef.current = false; }}>{PROFILE.name}<span className="heading-grip" aria-hidden="true">⠿</span></button></h1>
+          <button className="heading-mark" type="button" aria-expanded={!cardsHidden} aria-controls="portfolio-card-content" aria-label={cardsHidden ? "Show portfolio cards" : "Hide portfolio cards"} onClick={() => setCardsHidden((hidden) => !hidden)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 17h14"/><circle cx="9" cy="7" r="2.2"/><circle cx="15" cy="17" r="2.2"/></svg>
+          </button>
+        </header>
+
+        <div className={`portfolio-body${cardsHidden ? " is-collapsed" : ""}`} id="portfolio-card-content" aria-hidden={cardsHidden} inert={cardsHidden}>
+        <div className="portfolio-grid" aria-label="Featured portfolio projects">
+          <article className="glass-card profile-card" onPointerMove={setTilt} onPointerLeave={clearTilt}>
+            <img className="profile-avatar" src={PROFILE_IMAGE} alt="" />
+            <span className="profile-years">4.5<small>yrs</small></span>
+            <div className="profile-copy">
+              <h2>{PROFILE.tagline}</h2>
+              <p>builds with AI, ships for real users</p>
+            </div>
+            <span className="card-glow" aria-hidden="true" />
+          </article>
+
+          {projects.map((project, index) => (
+            <button
+              className={`glass-card project-card project-${project.slug}`}
+              type="button"
+              key={project.slug}
+              style={{ "--card-delay": `${index * 70}ms`, "--card-image": `url("${PROJECT_IMAGES[project.slug] || project.image}")` }}
+              onPointerMove={setTilt}
+              onPointerLeave={clearTilt}
+              onClick={() => openProject(project)}
+            >
+              <img src={PROJECT_IMAGES[project.slug] || project.image} alt="" draggable="false" />
+              <span className="project-live">{project.href ? "live" : "case"}</span>
+              <span className="project-copy">
+                <strong>{project.title}</strong>
+                <small>{project.kind}</small>
+              </span>
+              <span className="card-glow" aria-hidden="true" />
+            </button>
+          ))}
+
+          <button className="glass-card more-card" type="button" onClick={() => setWorkOpen(true)} onPointerMove={setTilt} onPointerLeave={clearTilt}>
+            <span className="more-icon" aria-hidden="true">▦</span>
+            <span className="project-live">all</span>
+            <span className="more-copy"><strong>Everything else</strong><small>projects, experience, contact</small></span>
+            <span className="card-glow" aria-hidden="true" />
+          </button>
+        </div>
+
+        <p className="lighting-label">Studio lighting</p>
+        <div className="lighting-grid" role="group" aria-label="Studio lighting presets">
+          {MOODS.map((item) => (
             <button
               type="button"
-              className="v3-toggle"
-              aria-label={collapsed ? "Open panel" : "Collapse panel"}
-              title={collapsed ? "Open panel" : "Collapse panel"}
-              onClick={() => setCollapsed((c) => !c)}
+              key={item.id}
+              className={`glass-card mood-card mood-${item.id} slot-${item.slot}${mood === item.id ? " is-selected" : ""}`}
+              aria-pressed={mood === item.id}
+              onClick={() => chooseMood(item)}
+              onPointerMove={setTilt}
+              onPointerLeave={clearTilt}
             >
-              <span aria-hidden="true" />
+              <span className="mood-icon" aria-hidden="true">{item.icon}</span>
+              <span className="mood-level">{brightness === item.level && mood === item.id ? brightness : item.level}<small>%</small></span>
+              <span className="mood-copy"><strong>{item.label}</strong>{item.detail && <small>{item.detail}</small>}</span>
+              {mood === item.id && <span className="selected-check" aria-hidden="true">✓</span>}
+              <span className="card-glow" aria-hidden="true" />
             </button>
-          </header>
+          ))}
+          <label className="glass-card brightness-card" style={{ "--brightness-fill": `${((brightness - 15) / 85) * 64}%`, "--brightness-ink": brightness >= 55 ? "#34362f" : "#fbfaf5" }} onPointerDown={startBrightnessDrag} onPointerMove={moveBrightnessDrag} onPointerUp={endBrightnessDrag} onPointerCancel={endBrightnessDrag}>
+            <span className="brightness-cap" aria-hidden="true" />
+            <span className="sun-icon" aria-hidden="true">☼</span>
+            <input
+              type="range"
+              min="15"
+              max="100"
+              value={brightness}
+              aria-label="Studio brightness"
+              onChange={(event) => setBrightness(Number(event.target.value))}
+            />
+            <span className="brightness-name">Brightness</span>
+          </label>
+        </div>
+        </div>
+      </section>
 
-          <div className="v3-scroll">
-            {/* portfolio bento */}
-            <div className="v3-grid grid-portfolio" role="group" aria-label="Portfolio">
-              <div className="tile tile-profile">
-                <span className="instrument">
-                  <img src={PROFILE.avatar} alt="" draggable="false" />
-                </span>
-                <span className="copy">
-                  <span className="name">Full-Stack Developer & AI Engineer</span>
-                  <span className="detail">builds with AI, ships for real users</span>
-                </span>
-                <Level value="4.5" unit="yrs" />
-              </div>
-
-              {tiles.map((p) => (
-                <button key={p.slug} type="button" className={`tile tile-img tile-${p.slug}`} onClick={() => openProject(p)} aria-label={`${p.title} — ${p.kind}`}>
-                  <span className="instrument">
-                    <img src={TILE_IMGS[p.slug]} alt="" draggable="false" loading="lazy" />
-                  </span>
-                  <span className="tile-corner">{p.href ? "live" : "case"}</span>
-                  <span className="copy">
-                    <span className="name">{p.title}</span>
-                    <span className="detail">{p.kind}</span>
-                  </span>
-                </button>
-              ))}
-
-              <button type="button" className="tile tile-more" onClick={() => setDrawer(true)} aria-label="Everything else — projects, experience, contact">
-                <span className="instrument more-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
-                </span>
-                <span className="tile-corner">all</span>
-                <span className="copy">
-                  <span className="name">Everything else</span>
-                  <span className="detail">projects, experience, contact</span>
-                </span>
-              </button>
-            </div>
-
-            <p className="v3-group-label">Studio lighting</p>
-
-            {/* lighting bento, arranged like the reference */}
-            <div className="v3-grid grid-lighting" role="group" aria-label="Studio lighting presets">
-              {MOOD_LIST.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`tile tile-img preset slot-${m.slot} mood-${m.id}`}
-                  aria-pressed={mood === m.id}
-                  onClick={() => handleMood(m.id)}
-                >
-                  <span className="instrument">
-                    <img src={`/v3/mood-${m.id}.jpg`} alt="" draggable="false" loading="lazy" />
-                  </span>
-                  {mood === m.id && <span className="indicator" aria-hidden="true" />}
-                  <span className="copy">
-                    <span className="name">{m.label}</span>
-                    <span className="detail">{m.detail}</span>
-                  </span>
-                  <Level value={m.level} unit="%" />
-                </button>
-              ))}
-
-              <div className="tile tile-bright">
-                <svg className="tile-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M19.4 4.6l-1.8 1.8M6.4 17.6l-1.8 1.8"/></svg>
-                <input
-                  type="range"
-                  min="15"
-                  max="100"
-                  value={bright}
-                  aria-label="Studio brightness"
-                  onChange={(e) => handleBright(e.target.value)}
-                />
-                <span className="bright-label">Brightness</span>
-              </div>
-            </div>
-          </div>
-          <p className="v3-hint">{HINTS[hintIdx]}</p>
-        </section>
-      </div>
-
-      <nav className="v3-versions" aria-label="Other portfolio versions">
-        <a href="/">v2 · default</a>
-        <a href="/v1">v1 · 3d</a>
-      </nav>
-      <p className="v3-credit">v3 · studio glass edition</p>
-
-      {drawer && (
-        <div className="v3-drawer-backdrop" role="dialog" aria-modal="true" aria-label="Everything else" onClick={(e) => e.target === e.currentTarget && setDrawer(false)}>
-          <div className="v3-drawer">
-            <header>
-              <h2>Everything else</h2>
-              <button type="button" className="drawer-close" aria-label="Close" onClick={() => setDrawer(false)}>×</button>
+      {workOpen && (
+        <div className="work-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setWorkOpen(false)}>
+          <section className="work-dialog" role="dialog" aria-modal="true" aria-labelledby="work-title">
+            <header className="work-header">
+              <div><p className="portfolio-eyebrow">A FEW THINGS I’VE BUILT</p><h2 id="work-title">Selected work</h2></div>
+              <button className="work-close" type="button" aria-label="Close selected work" onClick={() => setWorkOpen(false)}>×</button>
             </header>
-            <div className="drawer-cols">
-              <section>
-                <h3>Projects</h3>
-                <ul>
-                  {PROJECTS.filter((p) => !p.internal).map((p) => (
-                    <li key={p.slug}>
-                      {p.href ? (
-                        <a href={p.href} target="_blank" rel="noopener">
-                          <strong>{p.title}</strong>
-                          <span>{p.kind}</span>
-                        </a>
-                      ) : (
-                        <span>
-                          <strong>{p.title}</strong>
-                          <span>{p.kind}</span>
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section>
-                <h3>Experience</h3>
-                <ul>
-                  {JOBS.map((j) => (
-                    <li key={j.company}>
-                      <span>
-                        <strong>{j.title} · {j.company}</strong>
-                        <span>{j.from} — {j.to}{j.length ? ` · ${j.length}` : ""}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <h3>Contact</h3>
-                <ul>
-                  <li><a href={`mailto:${PROFILE.email}`}><strong>{PROFILE.email}</strong><span>email</span></a></li>
-                  <li><a href={PROFILE.github} target="_blank" rel="noopener"><strong>GitHub</strong><span>dayumcodes</span></a></li>
-                  <li><a href={PROFILE.linkedin} target="_blank" rel="noopener"><strong>LinkedIn</strong><span>mohammed-fuzail-2k24</span></a></li>
-                  <li><a href={PROFILE.x} target="_blank" rel="noopener"><strong>X</strong><span>mazino213</span></a></li>
-                </ul>
-              </section>
+            <div className="work-grid">
+              {PROJECTS.filter((project) => !FEATURED.includes(project.slug) && !project.internal).map((project, index) => (
+                <button className="work-card" type="button" key={project.slug} onClick={() => openProject(project)}>
+                  <span className="work-image-wrap"><img src={project.image} alt="" loading="lazy" /><span className="work-index">0{index + 1}</span><span className="work-arrow" aria-hidden="true">↗</span></span>
+                  <span className="work-copy"><strong>{project.title}</strong><span>{project.kind}</span><span className="work-summary">{project.summary}</span></span>
+                </button>
+              ))}
             </div>
-          </div>
+            <footer className="work-footer"><span>More on GitHub</span><a href={PROFILE.github} target="_blank" rel="noreferrer">@dayumcodes ↗</a><a href={`mailto:${PROFILE.email}`}>Email me ↗</a></footer>
+          </section>
         </div>
       )}
-    </div>
+    </main>
   );
 }
