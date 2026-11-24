@@ -33,11 +33,8 @@ export default function V3App() {
   const frameRef = useRef(null);
   const panelRef = useRef(null);
   const dragRef = useRef(null);
-  const brightnessDragRef = useRef(null);
   const movedRef = useRef(false);
   const tiltTimerRef = useRef(null);
-  const [mood, setMood] = useState("morning");
-  const [brightness, setBrightness] = useState(78);
   const [workOpen, setWorkOpen] = useState(false);
   const [cardsHidden, setCardsHidden] = useState(false);
   const projects = useMemo(
@@ -52,66 +49,28 @@ export default function V3App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Drive the original Studio Glass lighting controls inside the same-origin scene.
+  // The original scene owns lighting, slider, glass rendering and pointer animation.
+  // Layout-only placeholders let its native controls occupy the portfolio grid.
   useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return undefined;
-    let attempts = 0;
-    let timer;
-    const applyLighting = () => {
-      try {
-        const doc = frame.contentDocument;
-        if (!doc) return false;
-        const target = MOODS.find((item) => item.id === mood);
-        const button = [...doc.querySelectorAll("#studio-controls button[aria-label]")]
-          .find((item) => item.getAttribute("aria-label").startsWith(`${target.label},`));
-        if (!button) return false;
-        button.click();
-        const slider = doc.querySelector('#studio-controls input[type="range"]');
-        if (slider) {
-          const setter = Object.getOwnPropertyDescriptor(frame.contentWindow.HTMLInputElement.prototype, "value")?.set;
-          setter?.call(slider, String(brightness));
-          slider.dispatchEvent(new frame.contentWindow.Event("input", { bubbles: true }));
-          slider.dispatchEvent(new frame.contentWindow.Event("change", { bubbles: true }));
-        }
-        return true;
-      } catch {
-        return false;
+    let frameId;
+    let lastLayout = "";
+    const sync = () => {
+      const bridge = frameRef.current?.contentWindow?.portfolioStudio;
+      const slots = [...(panelRef.current?.querySelectorAll(".native-lighting-slot") || [])];
+      if (bridge && slots.length === 6) {
+        const rects = slots.map((slot) => {
+          const r = slot.getBoundingClientRect();
+          return { x:r.x, y:r.y, width:r.width, height:r.height, radius:parseFloat(getComputedStyle(slot).borderRadius) || 20 };
+        });
+        const layout = JSON.stringify([rects, !cardsHidden]);
+        if (layout !== lastLayout) { bridge.layout(rects, !cardsHidden); lastLayout = layout; }
       }
+      frameId = requestAnimationFrame(sync);
     };
-    const retry = () => {
-      if (applyLighting() || attempts++ > 20) clearInterval(timer);
-    };
-    frame.addEventListener("load", retry);
-    timer = window.setInterval(retry, 250);
-    retry();
-    return () => { clearInterval(timer); frame.removeEventListener("load", retry); };
-  }, [mood, brightness]);
+    sync();
+    return () => cancelAnimationFrame(frameId);
+  }, [cardsHidden]);
 
-  const chooseMood = (item) => {
-    setMood(item.id);
-    setBrightness(item.level);
-  };
-  const setBrightnessFromPointer = (event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const progress = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    setBrightness(Math.round(100 - progress * 85));
-  };
-  const startBrightnessDrag = (event) => {
-    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-    event.preventDefault();
-    brightnessDragRef.current = event.pointerId;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setBrightnessFromPointer(event);
-  };
-  const moveBrightnessDrag = (event) => {
-    if (brightnessDragRef.current !== event.pointerId) return;
-    event.preventDefault();
-    setBrightnessFromPointer(event);
-  };
-  const endBrightnessDrag = (event) => {
-    if (brightnessDragRef.current === event.pointerId) brightnessDragRef.current = null;
-  };
   const openProject = (project) => {
     if (project.internal) window.location.assign(project.internal);
     else if (project.href) window.open(project.href, "_blank", "noopener,noreferrer");
@@ -189,7 +148,7 @@ export default function V3App() {
       <iframe
         ref={frameRef}
         className="portfolio-scene"
-        src="/studio-glass.html?view=room"
+        src="/studio-glass-v3.html"
         title="Interactive studio room"
         allow="fullscreen"
       />
@@ -246,35 +205,9 @@ export default function V3App() {
         <p className="lighting-label">Studio lighting</p>
         <div className="lighting-grid" role="group" aria-label="Studio lighting presets">
           {MOODS.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={`glass-card mood-card mood-${item.id} slot-${item.slot}${mood === item.id ? " is-selected" : ""}`}
-              aria-pressed={mood === item.id}
-              onClick={() => chooseMood(item)}
-              onPointerMove={setTilt}
-              onPointerLeave={clearTilt}
-            >
-              <span className="mood-icon" aria-hidden="true">{item.icon}</span>
-              <span className="mood-level">{brightness === item.level && mood === item.id ? brightness : item.level}<small>%</small></span>
-              <span className="mood-copy"><strong>{item.label}</strong>{item.detail && <small>{item.detail}</small>}</span>
-              {mood === item.id && <span className="selected-check" aria-hidden="true">✓</span>}
-              <span className="card-glow" aria-hidden="true" />
-            </button>
+            <div key={item.id} className={`native-lighting-slot mood-card mood-${item.id} slot-${item.slot}`} aria-hidden="true" />
           ))}
-          <label className="glass-card brightness-card" style={{ "--brightness-fill": `${((brightness - 15) / 85) * 64}%`, "--brightness-ink": brightness >= 55 ? "#34362f" : "#fbfaf5" }} onPointerDown={startBrightnessDrag} onPointerMove={moveBrightnessDrag} onPointerUp={endBrightnessDrag} onPointerCancel={endBrightnessDrag}>
-            <span className="brightness-cap" aria-hidden="true" />
-            <span className="sun-icon" aria-hidden="true">☼</span>
-            <input
-              type="range"
-              min="15"
-              max="100"
-              value={brightness}
-              aria-label="Studio brightness"
-              onChange={(event) => setBrightness(Number(event.target.value))}
-            />
-            <span className="brightness-name">Brightness</span>
-          </label>
+          <div className="native-lighting-slot brightness-card" aria-hidden="true" />
         </div>
         </div>
       </section>
