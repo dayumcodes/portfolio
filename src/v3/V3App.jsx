@@ -194,7 +194,6 @@ export default function V3App() {
         allow="fullscreen"
       />
       <div className="scene-shade" aria-hidden="true" />
-      <div className={`rain-overlay${mood === "thunderstorm" ? " is-active" : ""}`} aria-hidden="true" />
 
       <section ref={panelRef} className="portfolio-panel" aria-label="Mohammed Fuzail portfolio">
         <header className="portfolio-heading">

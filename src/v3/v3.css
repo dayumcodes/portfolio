@@ -8,16 +8,6 @@ button, a, input { font: inherit; }
 .portfolio-glass { position: fixed; inset: 0; overflow: hidden; color: #fbfaf5; font-family: Geist, Inter, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 .portfolio-scene { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #111614; }
 .scene-shade { position: absolute; z-index: 1; inset: 0; pointer-events: none; background: linear-gradient(180deg,rgba(4,8,8,.24),rgba(4,8,8,.05) 52%,rgba(3,5,5,.28)),radial-gradient(ellipse at 50% 44%,transparent 42%,rgba(0,0,0,.27) 100%); }
-.rain-overlay { position: absolute; z-index: 2; top: 14vh; left: 0; width: min(21vw,200px); height: 50vh; overflow: hidden; clip-path: polygon(0 0,92% 0,100% 100%,0 100%); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .35s ease,visibility .35s ease; }
-.rain-overlay.is-active { opacity: 1; visibility: visible; }
-.rain-overlay::before,.rain-overlay::after { content: ""; position: absolute; inset: -8%; pointer-events: none; mix-blend-mode: screen; }
-.rain-overlay::before { opacity: .52; background-image: repeating-linear-gradient(103deg,transparent 0 11px,rgba(208,232,248,.28) 11.5px 12.2px,transparent 13px 29px),repeating-linear-gradient(105deg,transparent 0 22px,rgba(222,239,250,.2) 22.5px 23.2px,transparent 24px 53px); background-size: 37px 160px,61px 220px; animation: rain-streaks-fall .72s linear infinite; }
-.rain-overlay::after { opacity: .36; background-image: radial-gradient(ellipse 1.2px 4px at 50% 50%,rgba(221,239,251,.62) 20%,transparent 82%); background-size: 41px 93px; animation: rain-drops-fall .58s linear infinite; }
-@keyframes rain-streaks-fall { to { background-position: 0 160px,0 220px; } }
-@keyframes rain-drops-fall { to { background-position: 0 93px; } }
-@media (min-width: 1100px) { .rain-overlay { top: 19vh; width: min(32vw,620px); height: 60vh; clip-path: polygon(0 0,100% 8%,100% 95%,0 100%); } }
-@media (max-width: 760px) { .rain-overlay { top: 14vh; width: clamp(95px,34vw,210px); height: 52vh; } }
-
 .portfolio-panel { --panel-x: 0px; --panel-y: 0px; --panel-tilt: 0deg; position: absolute; z-index: 4; top: clamp(22px, 5vh, 46px); left: 50%; width: min(1040px, calc(100vw - 48px)); transform: translate(calc(-50% + var(--panel-x)), var(--panel-y)) rotate(var(--panel-tilt)); transform-origin: 50% 12%; transition: transform .48s cubic-bezier(.18,.78,.22,1); }
 .portfolio-panel[data-moving="true"] { transition: none; cursor: grabbing; }
 .portfolio-heading { display: flex; align-items: center; height: 40px; margin: 0 4px 19px; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
@@ -122,20 +112,50 @@ button.glass-card:focus-visible { outline: 2px solid #f3d4ad; outline-offset: 3p
 @media (max-width: 760px) {
   .portfolio-panel { top: 12px; width: calc(100vw - 24px); }
   .portfolio-heading { height: 34px; margin: 0 2px 11px; }
-  .portfolio-grid, .lighting-grid { gap: 7px; }
-  .portfolio-grid { grid-template-rows: 84px 84px; }
+  .portfolio-grid, .lighting-grid { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .portfolio-grid::-webkit-scrollbar, .lighting-grid::-webkit-scrollbar { display: none; }
+  .portfolio-grid > *, .lighting-grid > * { flex: 0 0 auto; scroll-snap-align: start; }
   .glass-card { border-radius: 18px; }
-  .profile-card { min-height: 175px; padding: 12px; }
+  .profile-card { width: 216px; min-width: 216px; min-height: 168px; padding: 12px; }
   .profile-avatar { width: 38px; height: 38px; }
   .profile-years { top: 12px; right: 10px; font-size: 20px; }
-  .profile-copy { left: 12px; bottom: 12px; }.profile-copy h2 { font-size: 16px; }.profile-copy p { font-size: 9px; }
-  .project-card { min-height: 84px; }.project-copy { left: 9px; bottom: 9px; }.project-copy strong { font-size: 10px; }.project-copy small { font-size: 8px; }.project-live { top: 9px; right: 9px; font-size: 8px; }
-  .more-card { min-height: 84px; }.more-copy { left: 10px; bottom: 9px; }.more-copy strong { font-size: 12px; }.more-copy small { font-size: 8px; }.more-icon { top: 10px; left: 10px; font-size: 18px; }
-  .lighting-label { margin: 10px 2px 6px; font-size: 8px; }
-  .lighting-grid { grid-template-rows: 82px 82px; }.mood-card { min-height: 82px; }.slot-hero { min-height: 171px; border-radius: 22px; }.slot-hero .mood-icon { top: 17px; left: 13px; font-size: 31px; }.slot-hero .mood-level { top: 15px; right: 10px; font-size: 17px; }.slot-hero .mood-copy { left: 13px; bottom: 13px; }.slot-hero .mood-copy strong { font-size: 17px; }.slot-hero .mood-copy small { font-size: 8px; }
-  .mood-card .mood-icon { top: 9px; left: 9px; font-size: 19px; }.mood-card .mood-level { top: 9px; right: 8px; font-size: 13px; }.mood-copy { left: 9px; bottom: 8px; }.mood-copy strong { font-size: 10px; }.mood-copy small { font-size: 8px; }.selected-check { right: 8px; bottom: 7px; width: 15px; height: 15px; font-size: 9px; }
-  .brightness-card { min-height: 171px; padding-bottom: 13px; border-radius: 22px; }.sun-icon { font-size: 22px; }.brightness-name { font-size: 8px; }
-  .work-backdrop { padding: 10px; }.work-dialog { max-height: calc(100vh - 20px); padding: 17px; border-radius: 19px; }.work-grid { grid-template-columns: 1fr; gap: 9px; }.work-image-wrap { aspect-ratio: 2.7 / 1; }.work-footer { flex-wrap: wrap; gap: 12px; }.work-footer span { flex-basis: 100%; }
+  .profile-copy { left: 12px; bottom: 12px; }
+  .profile-copy h2 { font-size: 16px; }
+  .profile-copy p { font-size: 9px; }
+  .project-card { width: 152px; min-width: 152px; min-height: 128px; }
+  .project-copy { left: 11px; right: 8px; bottom: 10px; }
+  .project-copy strong { font-size: 12px; }
+  .project-copy small { font-size: 9px; }
+  .project-live { top: 10px; right: 10px; font-size: 8px; }
+  .more-card { width: 152px; min-width: 152px; min-height: 128px; }
+  .more-copy { left: 11px; right: 8px; bottom: 10px; }
+  .more-copy strong { font-size: 12px; }
+  .more-copy small { font-size: 9px; }
+  .more-icon { top: 10px; left: 11px; font-size: 18px; }
+  .lighting-label { margin: 10px 2px 6px; font-size: 9px; }
+  .mood-card { width: 136px; min-width: 136px; min-height: 112px; }
+  .mood-card .mood-icon { top: 10px; left: 11px; font-size: 19px; }
+  .mood-card .mood-level { top: 10px; right: 9px; font-size: 13px; }
+  .mood-copy { left: 11px; right: 8px; bottom: 9px; }
+  .mood-copy strong { font-size: 11px; }
+  .mood-copy small { font-size: 9px; }
+  .slot-hero { width: 166px; min-width: 166px; min-height: 112px; border-radius: 20px; }
+  .slot-hero .mood-icon { top: 12px; left: 13px; font-size: 27px; }
+  .slot-hero .mood-level { top: 12px; right: 10px; font-size: 16px; }
+  .slot-hero .mood-copy { left: 13px; bottom: 11px; }
+  .slot-hero .mood-copy strong { font-size: 16px; }
+  .slot-hero .mood-copy small { font-size: 9px; }
+  .brightness-card { width: 96px; min-width: 96px; min-height: 112px; padding-bottom: 13px; border-radius: 20px; }
+  .sun-icon { font-size: 20px; }
+  .brightness-name { font-size: 8px; }
+  .selected-check { right: 8px; bottom: 7px; width: 15px; height: 15px; font-size: 9px; }
+  .mood-card.is-selected .mood-copy { right: 28px; }
+  .work-backdrop { padding: 10px; }
+  .work-dialog { max-height: calc(100vh - 20px); padding: 17px; border-radius: 19px; }
+  .work-grid { grid-template-columns: 1fr; gap: 9px; }
+  .work-image-wrap { aspect-ratio: 2.7 / 1; }
+  .work-footer { flex-wrap: wrap; gap: 12px; }
+  .work-footer span { flex-basis: 100%; }
 }
 @media (max-height: 680px) and (min-width: 761px) { .portfolio-panel { top: 18px; }.portfolio-heading { margin-bottom: 12px; }.portfolio-grid { grid-template-rows: 92px 92px; }.profile-card { min-height: 196px; }.lighting-label { margin: 11px 4px 6px; }.lighting-grid { grid-template-rows: 90px 90px; }.slot-hero,.brightness-card { min-height: 192px; } }
-@media (prefers-reduced-motion: reduce) { *,*::before,*::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }.rain-overlay::before { animation-duration: 1.8s !important; animation-iteration-count: infinite !important; }.rain-overlay::after { animation-duration: 1.45s !important; animation-iteration-count: infinite !important; } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; } }
